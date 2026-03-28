@@ -32,7 +32,8 @@ export default function SetupScreen() {
       })
       if (!res.ok) throw new Error('Failed to create room')
       const { roomId } = await res.json()
-      navigate(`/debate/${roomId}?name=${encodeURIComponent(debater1.trim())}&d1=${encodeURIComponent(debater1.trim())}&d2=${encodeURIComponent(debater2.trim())}`)
+      // Navigate to AI preparation screen first
+      navigate(`/preparing/${roomId}?topic=${encodeURIComponent(topic.trim())}&d1=${encodeURIComponent(debater1.trim())}&d2=${encodeURIComponent(debater2.trim())}`)
     } catch (err) {
       setError(err.message)
       setLoading(false)
@@ -54,7 +55,7 @@ export default function SetupScreen() {
             DEBATE<span className="text-white">ROAST</span>
           </h1>
           <p className="text-gray-400 text-lg mt-2 font-medium">
-            🔥 The only debate where BS gets called out in real time 🔥
+            Real-time AI accountability for live debates.
           </p>
         </motion.div>
 
@@ -159,7 +160,8 @@ function JoinRoomForm() {
       return
     }
     const room = await res.json()
-    navigate(`/debate/${upperRoomId}?name=${encodeURIComponent(name.trim())}&d1=${encodeURIComponent(room.debaters[0])}&d2=${encodeURIComponent(room.debaters[1])}`)
+    // Join also goes through the AI preparation flow  
+    navigate(`/preparing/${upperRoomId}?topic=${encodeURIComponent(room.topic)}&d1=${encodeURIComponent(room.debaters[0])}&d2=${encodeURIComponent(room.debaters[1])}&joining=true`)
   }
 
   return (
