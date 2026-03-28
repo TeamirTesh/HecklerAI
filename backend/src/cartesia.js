@@ -21,7 +21,7 @@ export async function generateSpeech(text, { speed = 0 } = {}) {
     const response = await axios.post(
       'https://api.cartesia.ai/tts/bytes',
       {
-        model_id: 'sonic-english',
+        model_id: 'sonic-2',
         transcript: text,
         voice: {
           mode: 'id',
