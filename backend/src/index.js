@@ -4,6 +4,11 @@ import { createServer } from 'http'
 import { Server } from 'socket.io'
 import cors from 'cors'
 import { v4 as uuidv4 } from 'uuid'
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
+import { existsSync } from 'fs'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 import {
   createRoom,
   getRoom,
@@ -62,8 +67,8 @@ const activeStreams = new Map()
 io.on('connection', (socket) => {
   console.log(`[Socket] Connected: ${socket.id}`)
 
-  // Debater joins a room
-  socket.on('join_room', async ({ roomId, speakerName }, ack) => {
+  // Debater (or spectator) joins a room
+  socket.on('join_room', async ({ roomId, speakerName, isSpectator }, ack) => {
     const room = await getRoom(roomId)
     if (!room) {
       ack?.({ error: 'Room not found' })
@@ -72,9 +77,14 @@ io.on('connection', (socket) => {
     socket.join(roomId)
     socket.data.roomId = roomId
     socket.data.speakerName = speakerName
+    socket.data.isSpectator = !!isSpectator
 
-    console.log(`[Socket] ${speakerName} joined room ${roomId}`)
-    socket.to(roomId).emit('peer_joined', { speakerName })
+    if (isSpectator) {
+      console.log(`[Socket] Spectator joined room ${roomId}`)
+    } else {
+      console.log(`[Socket] ${speakerName} joined room ${roomId}`)
+      socket.to(roomId).emit('peer_joined', { speakerName })
+    }
     ack?.({ ok: true, room })
   })
 
@@ -155,7 +165,7 @@ io.on('connection', (socket) => {
       streamData.stream.close()
       activeStreams.delete(socket.id)
     }
-    if (socket.data.speakerName && socket.data.roomId) {
+    if (socket.data.speakerName && socket.data.roomId && !socket.data.isSpectator) {
       socket.to(socket.data.roomId).emit('peer_left', {
         speakerName: socket.data.speakerName,
       })
@@ -165,6 +175,13 @@ io.on('connection', (socket) => {
 
 // ── Healthcheck ────────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ ok: true, ts: Date.now() }))
+
+// ── Serve frontend static files (production) ──────────────────────────────────
+const frontendDist = join(__dirname, '../../frontend/dist')
+if (existsSync(frontendDist)) {
+  app.use(express.static(frontendDist))
+  app.get('*', (req, res) => res.sendFile(join(frontendDist, 'index.html')))
+}
 
 httpServer.listen(PORT, () => {
   console.log(`[Server] DebateRoast backend running on port ${PORT}`)
