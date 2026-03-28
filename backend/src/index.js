@@ -267,7 +267,7 @@ app.get('/api/test-ai', async (req, res) => {
     try {
       const { default: OpenAI } = await import('openai')
       const c = new OpenAI({ apiKey: process.env.CEREBRAS_API_KEY, baseURL: 'https://api.cerebras.ai/v1' })
-      const r = await c.chat.completions.create({ model: 'llama3.3-70b', messages: ping, max_tokens: 10 })
+      const r = await c.chat.completions.create({ model: 'llama3.1-70b', messages: ping, max_tokens: 10 })
       results.cerebras = { ok: true, response: r.choices[0]?.message?.content }
     } catch (err) {
       results.cerebras = { ok: false, error: err.message }
