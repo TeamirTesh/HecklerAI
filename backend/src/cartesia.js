@@ -87,7 +87,7 @@ export async function buildRoastAudio(stopPhrase, roastText) {
  */
 export async function generateOpeningAnnouncement() {
   const text =
-    "ALRIGHT LADIES AND GENTLEMEN WELCOME TO DEBATEROAST — THE ONLY DEBATE WHERE BULLSHIT GETS CALLED OUT IN REAL TIME. I don't care who you are, I don't care what side you're on — you say something stupid, I am ON YOUR ASS immediately. Topic is set. Debaters are ready. I want a clean fight. LET'S GO."
+    "ALRIGHT LADIES AND GENTLEMEN WELCOME TO DEBATEROAST — THE ONLY DEBATE WHERE BULLSHIT GETS CALLED OUT IN REAL TIME. I don't give a fuck who you are, I don't give a fuck what side you're on — you say something stupid, I am ON THAT ASS like white on rice. Topic is set. Debaters are ready. I want a clean fight. LET'S FUCKING DO THIS."
 
   return generateSpeech(text, { speed: 0.5 })
 }

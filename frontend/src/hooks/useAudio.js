@@ -128,7 +128,7 @@ export function speakText(text, { rate = 1.25, pitch = 0.5 } = {}) {
 }
 
 const OPENING_TEXT =
-  "ALRIGHT LADIES AND GENTLEMEN, WELCOME TO DEBATE ROAST — THE ONLY DEBATE WHERE BAD ARGUMENTS GET CALLED OUT IN REAL TIME. I don't care who you are, I don't care what side you're on — you say something stupid, I am ON YOUR CASE immediately. Topic is set. Debaters are ready. Let's go."
+  "ALRIGHT LADIES AND GENTLEMEN, WELCOME TO DEBATEROAST — THE ONLY DEBATE WHERE BULLSHIT GETS CALLED OUT IN REAL TIME. I don't give a fuck who you are, I don't give a fuck what side you're on — you say something stupid, I am ON THAT ASS like white on rice. Topic is set. Debaters are ready. I want a clean fight. LET'S FUCKING DO THIS."
 
 /**
  * Play the opening announcement — uses Cartesia audio if provided,

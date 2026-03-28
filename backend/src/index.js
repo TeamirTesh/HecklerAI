@@ -74,6 +74,9 @@ const activeStreams = new Map()
 // ── Debounce timers: wait 3s of silence before running analysis ───────────────
 // Map<`${roomId}:${speakerName}`, timeoutId>
 const analysisPending = new Map()
+// ── Accumulated text per speaker (captures full speech burst, not just last sentence) ──
+// Map<`${roomId}:${speakerName}`, string>
+const pendingText = new Map()
 
 // ── Socket.io ─────────────────────────────────────────────────────────────────
 io.on('connection', (socket) => {
@@ -176,17 +179,23 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('transcript', { speaker: speakerName, text: clean, timestamp: Date.now() })
     await pushTranscript(roomId, speakerName, clean)
 
+    // Accumulate text so the AI sees the full burst of speech (not just the last sentence)
+    const key = `${roomId}:${speakerName}`
+    const existing = pendingText.get(key) || ''
+    pendingText.set(key, existing ? `${existing} ${clean}` : clean)
+
     // Debounce analysis — reset the 3s timer each time new words arrive.
     // Only fires 3 seconds after the speaker goes quiet.
-    const key = `${roomId}:${speakerName}`
     if (analysisPending.has(key)) clearTimeout(analysisPending.get(key))
 
     const timer = setTimeout(async () => {
       analysisPending.delete(key)
+      const accumulated = pendingText.get(key) || clean
+      pendingText.delete(key)
       await processUtterance({
         roomId,
         speaker: speakerName,
-        utterance: clean,
+        utterance: accumulated,
         roastLevel: roastLevel || 'savage',
         onRoast: async (payload) => {
           console.log(`[Roast] Emitting roast for ${payload.speaker} in ${roomId}`)
