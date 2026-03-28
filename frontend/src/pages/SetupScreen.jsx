@@ -23,7 +23,7 @@ export default function SetupScreen() {
     try {
       const res = await fetch(`${BACKEND_URL}/api/rooms`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
         body: JSON.stringify({
           topic: topic.trim(),
           debater1: debater1.trim(),
@@ -153,7 +153,7 @@ function JoinRoomForm() {
       return
     }
     const upperRoomId = roomId.trim().toUpperCase()
-    const res = await fetch(`${BACKEND_URL}/api/rooms/${upperRoomId}`)
+    const res = await fetch(`${BACKEND_URL}/api/rooms/${upperRoomId}`, { headers: { 'ngrok-skip-browser-warning': 'true' } })
     if (!res.ok) {
       setError('Room not found')
       return

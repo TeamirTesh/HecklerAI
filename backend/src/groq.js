@@ -75,3 +75,38 @@ Analyze this utterance. Is there a logical fallacy or a verifiable factual claim
     return { interrupt: false, type: 'CLEAN' }
   }
 }
+
+/**
+ * Rewrite a roast to call out the specific wrong claim using real facts
+ * retrieved from Tavily.
+ *
+ * @param {string} roast       - the original roast text
+ * @param {string} claim       - the claim the debater made
+ * @param {string} factAnswer  - the real fact from Tavily (answer or top result)
+ * @returns {Promise<string>}  - the rewritten roast with the real fact baked in
+ */
+export async function augmentRoastWithFacts(roast, claim, factAnswer) {
+  const groq = getGroq()
+  try {
+    const completion = await groq.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You are DebateRoast. You have a roast ready but now have the real verified facts. Rewrite the roast to specifically call out the wrong claim with the real number or fact. Keep the same savage, vulgar, profane tone. Return ONLY the roast text — no JSON, no labels, no extra commentary.',
+        },
+        {
+          role: 'user',
+          content: `Original roast: "${roast}"\n\nWrong claim made: "${claim}"\n\nReal verified fact: "${factAnswer}"\n\nRewrite the roast to destroy them with the real fact.`,
+        },
+      ],
+      temperature: 0.9,
+      max_tokens: 300,
+    })
+    return completion.choices[0]?.message?.content?.trim() || roast
+  } catch (err) {
+    console.error('[Groq] Roast augmentation error:', err.message)
+    return roast
+  }
+}

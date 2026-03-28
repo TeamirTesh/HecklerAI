@@ -85,8 +85,19 @@ export default function RoastCard({ roast, onDismiss }) {
 
             {/* Fact source */}
             {roast.factSource && (
-              <p className="mt-2 text-red-300 text-xs italic border-t border-red-500/40 pt-2">
-                Source: {roast.factSource}
+              <p className="mt-2 text-red-300 text-xs italic border-t border-red-500/40 pt-2 pointer-events-auto">
+                Source:{' '}
+                <a
+                  href={roast.factSource}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-white break-all"
+                  title={roast.factSource}
+                >
+                  {roast.factSource.length > 60
+                    ? roast.factSource.slice(0, 57) + '…'
+                    : roast.factSource}
+                </a>
               </p>
             )}
 

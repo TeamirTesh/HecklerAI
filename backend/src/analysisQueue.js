@@ -7,7 +7,7 @@ import {
   recordRoast,
 } from './roomManager.js'
 import { analyzeUtterance } from './groq.js'
-import { factCheck } from './perplexity.js'
+import { factCheck } from './tavily.js'
 import { buildRoastAudio } from './cartesia.js'
 
 /**
