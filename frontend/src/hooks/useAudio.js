@@ -99,22 +99,32 @@ export async function playBase64Audio(base64) {
  * @param {number} [opts.rate]  - speaking rate (default 1.1)
  * @param {number} [opts.pitch] - pitch (default 0.85, lower = deeper)
  */
-export function speakText(text, { rate = 1.1, pitch = 0.85 } = {}) {
+export function speakText(text, { rate = 1.25, pitch = 0.5 } = {}) {
   if (!window.speechSynthesis || !text) return
   window.speechSynthesis.cancel()
   const utterance = new SpeechSynthesisUtterance(text)
-  utterance.rate = rate
-  utterance.pitch = pitch
+  utterance.rate = rate   // fast and snappy
+  utterance.pitch = pitch // low and aggressive
   utterance.volume = 1
 
-  // Pick a deep male voice if available
-  const voices = window.speechSynthesis.getVoices()
-  const preferred = voices.find(v =>
-    /daniel|alex|fred|ralph|bruce|albert/i.test(v.name)
-  ) || voices.find(v => v.lang === 'en-US' && /male/i.test(v.name))
-  if (preferred) utterance.voice = preferred
+  // Load voices — some browsers need a short wait
+  const setVoice = () => {
+    const voices = window.speechSynthesis.getVoices()
+    // Prefer deep/authoritative English male voices
+    const preferred =
+      voices.find(v => /google uk english male/i.test(v.name)) ||
+      voices.find(v => /daniel|alex|fred|ralph|bruce|albert|arthur/i.test(v.name)) ||
+      voices.find(v => v.lang === 'en-GB') ||
+      voices.find(v => v.lang === 'en-US')
+    if (preferred) utterance.voice = preferred
+    window.speechSynthesis.speak(utterance)
+  }
 
-  window.speechSynthesis.speak(utterance)
+  if (window.speechSynthesis.getVoices().length > 0) {
+    setVoice()
+  } else {
+    window.speechSynthesis.onvoiceschanged = setVoice
+  }
 }
 
 const OPENING_TEXT =
@@ -145,6 +155,6 @@ export async function playRoastAudio(audioBase64, stopPhrase, roastText) {
     await playBase64Audio(audioBase64)
   } else {
     const text = [stopPhrase, roastText].filter(Boolean).join('. ')
-    speakText(text, { rate: 1.15, pitch: 0.8 })
+    speakText(text, { rate: 1.3, pitch: 0.45 })
   }
 }

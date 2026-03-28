@@ -22,10 +22,7 @@ import { buildRoastAudio, generateSpeech } from './cartesia.js'
  */
 export async function processUtterance({ roomId, speaker, utterance, onRoast }) {
   // Skip very short utterances — likely fragments, not full thoughts
-  if (utterance.trim().split(/\s+/).length < 5) return
-
-  // Wait 2.5s so the full thought lands in context before we analyze
-  await new Promise((r) => setTimeout(r, 2500))
+  if (utterance.trim().split(/\s+/).length < 4) return
 
   const room = await getRoom(roomId)
   if (!room || room.status !== 'active') return

@@ -71,6 +71,10 @@ app.get('/api/rooms/:roomId/summary', async (req, res) => {
 // Map<socketId, { stream, roomId, speakerName }>
 const activeStreams = new Map()
 
+// ── Debounce timers: wait 3s of silence before running analysis ───────────────
+// Map<`${roomId}:${speakerName}`, timeoutId>
+const analysisPending = new Map()
+
 // ── Socket.io ─────────────────────────────────────────────────────────────────
 io.on('connection', (socket) => {
   console.log(`[Socket] Connected: ${socket.id}`)
@@ -166,17 +170,31 @@ io.on('connection', (socket) => {
   // Final transcript text from Web Speech API
   socket.on('transcript_text', async ({ roomId, speakerName, text }) => {
     if (!text?.trim()) return
-    io.to(roomId).emit('transcript', { speaker: speakerName, text: text.trim(), timestamp: Date.now() })
-    await pushTranscript(roomId, speakerName, text.trim())
-    await processUtterance({
-      roomId,
-      speaker: speakerName,
-      utterance: text.trim(),
-      onRoast: async (payload) => {
-        console.log(`[Roast] Emitting roast for ${payload.speaker} in ${roomId}`)
-        io.to(roomId).emit('roast', payload)
-      },
-    })
+    const clean = text.trim()
+
+    // Broadcast transcript immediately so everyone sees what was said
+    io.to(roomId).emit('transcript', { speaker: speakerName, text: clean, timestamp: Date.now() })
+    await pushTranscript(roomId, speakerName, clean)
+
+    // Debounce analysis — reset the 3s timer each time new words arrive.
+    // Only fires 3 seconds after the speaker goes quiet.
+    const key = `${roomId}:${speakerName}`
+    if (analysisPending.has(key)) clearTimeout(analysisPending.get(key))
+
+    const timer = setTimeout(async () => {
+      analysisPending.delete(key)
+      await processUtterance({
+        roomId,
+        speaker: speakerName,
+        utterance: clean,
+        onRoast: async (payload) => {
+          console.log(`[Roast] Emitting roast for ${payload.speaker} in ${roomId}`)
+          io.to(roomId).emit('roast', payload)
+        },
+      })
+    }, 3000)
+
+    analysisPending.set(key, timer)
   })
 
   // Interim (partial) speech — broadcast to room but NOT back to sender
