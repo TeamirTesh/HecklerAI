@@ -103,7 +103,7 @@ io.on('connection', (socket) => {
 
     // Create Deepgram stream if it doesn't exist for this socket
     if (!activeStreams.has(streamKey)) {
-      console.log(`[Deepgram] Creating stream for ${speakerName} in ${roomId}`)
+      console.log(`[AssemblyAI] Creating stream for ${speakerName} in ${roomId}`)
 
       const stream = createDeepgramStream({
         speakerName,

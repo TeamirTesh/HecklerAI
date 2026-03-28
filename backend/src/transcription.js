@@ -1,7 +1,8 @@
-import { RealtimeTranscriber } from 'assemblyai'
+import { StreamingTranscriber } from 'assemblyai'
 
 /**
  * Creates an AssemblyAI real-time transcription stream for a single speaker.
+ * Uses the v3 Streaming API (wss://streaming.assemblyai.com/v3/ws).
  *
  * @param {object} opts
  * @param {string} opts.speakerName  - label shown in the transcript
@@ -10,14 +11,20 @@ import { RealtimeTranscriber } from 'assemblyai'
  * @returns {{ send: function(Buffer), close: function() }}
  */
 export function createDeepgramStream({ speakerName, onFinal, onError }) {
-  const transcriber = new RealtimeTranscriber({
+  const transcriber = new StreamingTranscriber({
     apiKey: process.env.ASSEMBLYAI_API_KEY,
     sampleRate: 16000,
+    speechModel: 'universal-streaming-english',
   })
 
-  transcriber.on('transcript', (message) => {
-    if (message.message_type === 'FinalTranscript' && message.text?.trim()) {
-      const transcript = message.text.trim()
+  transcriber.on('open', () => {
+    console.log(`[AssemblyAI] Connected for ${speakerName}`)
+  })
+
+  // v3 fires "turn" events; end_of_turn=true means a final, complete sentence
+  transcriber.on('turn', (event) => {
+    if (event.end_of_turn && event.transcript?.trim()) {
+      const transcript = event.transcript.trim()
       console.log(`[AssemblyAI] Final for ${speakerName}: "${transcript}"`)
       onFinal(speakerName, transcript)
     }
@@ -29,23 +36,25 @@ export function createDeepgramStream({ speakerName, onFinal, onError }) {
   })
 
   transcriber.on('close', (code, reason) => {
-    console.log(`[AssemblyAI] Connection closed for ${speakerName} — ${code} ${reason}`)
+    console.log(`[AssemblyAI] Closed for ${speakerName} — ${code} ${reason}`)
   })
 
-  // Connect immediately; store the promise so send() can await it if needed
+  // Connect immediately; await before first send if needed
+  let connected = false
+  let failed = false
   const readyPromise = transcriber.connect().then(() => {
-    console.log(`[AssemblyAI] Connected for ${speakerName}`)
+    connected = true
   }).catch((err) => {
+    failed = true
     console.error(`[AssemblyAI] Connection failed for ${speakerName}:`, err)
     onError?.(err)
   })
 
-  let connected = false
-  readyPromise.then(() => { connected = true })
-
   return {
     async send(buffer) {
+      if (failed) return
       if (!connected) await readyPromise
+      if (failed) return
       transcriber.sendAudio(buffer)
     },
     async close() {
