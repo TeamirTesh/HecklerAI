@@ -106,13 +106,16 @@ io.on('connection', (socket) => {
 
     console.log(`[Socket] Starting debate in room ${roomId}`)
 
-    // Generate opening announcement
-    const audioBuffer = await generateOpeningAnnouncement()
-    io.to(roomId).emit('debate_started', {
-      room,
-      openingAudioBase64: audioBuffer ? audioBuffer.toString('base64') : null,
-    })
+    // Emit debate_started IMMEDIATELY so the mic and debateStatus activate without delay
+    io.to(roomId).emit('debate_started', { room, openingAudioBase64: null })
     ack?.({ ok: true })
+
+    // Generate opening audio in background — send when ready (non-blocking)
+    generateOpeningAnnouncement().then((audioBuffer) => {
+      if (audioBuffer) {
+        io.to(roomId).emit('opening_audio', { audioBase64: audioBuffer.toString('base64') })
+      }
+    })
   })
 
   // Audio chunk from a debater's mic

@@ -26,32 +26,29 @@ export default function EnhancedSummaryScreen() {
   const [activeTab, setActiveTab] = useState('overview')
 
   useEffect(() => {
-    const fetchData = async () => {
+    const roastMode = sessionStorage.getItem('roastLevel') || 'standard'
+    let pollCount = 0
+
+    const fetchSummary = async () => {
       try {
         const res = await fetch(`${BACKEND_URL}/api/rooms/${roomId}/summary`)
-        if (!res.ok) throw new Error('Failed to fetch')
+        if (!res.ok) throw new Error(`Room not found (${res.status})`)
         const summaryData = await res.json()
+        setData({ ...summaryData, roastMode })
+        setLoading(false)
 
-        // If analytics aren't ready yet (Groq still processing), poll once after 3s
-        if (!summaryData.analytics) {
-          setTimeout(async () => {
-            try {
-              const retry = await fetch(`${BACKEND_URL}/api/rooms/${roomId}/summary`)
-              const retryData = await retry.json()
-              setData({ ...retryData, roastMode: sessionStorage.getItem('roastLevel') || 'standard' })
-            } catch (_) {}
-          }, 3000)
+        // If Groq analytics aren't back yet, keep polling up to 5 times
+        if (!summaryData.analytics && pollCount < 5) {
+          pollCount++
+          setTimeout(fetchSummary, 3000)
         }
-
-        setData({ ...summaryData, roastMode: sessionStorage.getItem('roastLevel') || 'standard' })
       } catch (e) {
         setError(e.message)
-      } finally {
         setLoading(false)
       }
     }
 
-    fetchData()
+    fetchSummary()
   }, [roomId, d1, d2])
 
   if (loading) {

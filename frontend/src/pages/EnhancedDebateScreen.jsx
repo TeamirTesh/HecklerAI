@@ -97,13 +97,15 @@ export default function EnhancedDebateScreen() {
         return next
       })
     },
-    debate_started: async ({ room: updatedRoom, openingAudioBase64 }) => {
+    debate_started: ({ room: updatedRoom }) => {
       setRoom(updatedRoom)
       setDebateStatus('active')
       setDebateTimer(0)
-      if (openingAudioBase64 && !openingPlayedRef.current) {
+    },
+    opening_audio: async ({ audioBase64 }) => {
+      if (audioBase64 && !openingPlayedRef.current) {
         openingPlayedRef.current = true
-        await playBase64Audio(openingAudioBase64)
+        await playBase64Audio(audioBase64)
       }
     },
     transcript: (entry) => {

@@ -44,13 +44,15 @@ export default function SpectateScreen() {
     : { bg: 'from-purple-500/10 to-pink-500/10', border: 'border-purple-500/50', text: 'text-purple-400' }
 
   const { emit } = useSocket({
-    debate_started: async ({ room: updatedRoom, openingAudioBase64 }) => {
+    debate_started: ({ room: updatedRoom }) => {
       setRoom(updatedRoom)
       setDebateStatus('active')
       setDebateTimer(0)
-      if (openingAudioBase64 && !openingPlayedRef.current) {
+    },
+    opening_audio: async ({ audioBase64 }) => {
+      if (audioBase64 && !openingPlayedRef.current) {
         openingPlayedRef.current = true
-        await playBase64Audio(openingAudioBase64)
+        await playBase64Audio(audioBase64)
       }
     },
     transcript: (entry) => {
