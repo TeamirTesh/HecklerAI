@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useSocket } from '../hooks/useSocket.js'
 import { playBase64Audio } from '../hooks/useAudio.js'
 import { useTranscription } from '../hooks/useTranscription.js'
+import RoastCard from '../components/RoastCard.jsx'
 
 export default function EnhancedDebateScreen() {
   const { roomId } = useParams()
@@ -32,6 +33,7 @@ export default function EnhancedDebateScreen() {
   const [debateTimer, setDebateTimer] = useState(0)
   const [interimText, setInterimText] = useState('')
   const [otherInterimText, setOtherInterimText] = useState({ speaker: null, text: '' })
+  const [currentRoast, setCurrentRoast] = useState(null)
 
   const openingPlayedRef = useRef(false)
   const debateStatusRef = useRef(debateStatus)
@@ -122,13 +124,14 @@ export default function EnhancedDebateScreen() {
         id: Date.now(),
         type: payload.fallacyName || payload.type || 'Logic Error',
         speaker: payload.speaker,
-        message: payload.message || payload.text,
-        roastMessage: payload.roastMessage || payload.text,
+        message: payload.roast || payload.text,
+        roastMessage: payload.roast || payload.text,
         confidence: payload.confidence || Math.floor(Math.random() * 20) + 80,
         timestamp: Date.now()
       }
-      
-      setRoastAlerts(prev => [newAlert, ...prev.slice(0, 9)]) // Keep last 10 alerts
+
+      setCurrentRoast(payload)
+      setRoastAlerts(prev => [newAlert, ...prev.slice(0, 9)])
       
       // Update counters
       setRoastCounter(prev => ({
@@ -473,6 +476,9 @@ export default function EnhancedDebateScreen() {
           </div>
         </div>
       </div>
+
+      {/* ROAST POPUP */}
+      <RoastCard roast={currentRoast} onDismiss={() => setCurrentRoast(null)} />
 
       {/* BOTTOM CONTROLS */}
       <div className="bg-gray-900/90 backdrop-blur border-t border-gray-800 px-6 py-4">

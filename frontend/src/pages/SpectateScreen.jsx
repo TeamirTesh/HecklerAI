@@ -3,6 +3,7 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSocket } from '../hooks/useSocket.js'
 import { playBase64Audio } from '../hooks/useAudio.js'
+import RoastCard from '../components/RoastCard.jsx'
 
 export default function SpectateScreen() {
   const { roomId } = useParams()
@@ -20,6 +21,7 @@ export default function SpectateScreen() {
   const [currentSpeaker, setCurrentSpeaker] = useState(null)
   const [debateTimer, setDebateTimer] = useState(0)
   const [liveInterim, setLiveInterim] = useState({ speaker: null, text: '' })
+  const [currentRoast, setCurrentRoast] = useState(null)
 
   const openingPlayedRef = useRef(false)
   const transcriptEndRef = useRef(null)
@@ -62,6 +64,7 @@ export default function SpectateScreen() {
       setLiveInterim(prev => prev.speaker === entry.speaker ? { speaker: null, text: '' } : prev)
     },
     roast: async (payload) => {
+      setCurrentRoast(payload)
       setScores(payload.scores || scores)
       setRoastAlerts(prev => [{
         id: Date.now(),
@@ -254,6 +257,9 @@ export default function SpectateScreen() {
           </div>
         </div>
       </div>
+
+      {/* ROAST POPUP */}
+      <RoastCard roast={currentRoast} onDismiss={() => setCurrentRoast(null)} />
 
       {/* Status bar */}
       <div className="bg-gray-900 border-t border-gray-800 px-6 py-4">
