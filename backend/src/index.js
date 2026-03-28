@@ -265,10 +265,22 @@ app.get('/api/test-ai', async (req, res) => {
 
   if (process.env.CEREBRAS_API_KEY) {
     try {
-      const { default: OpenAI } = await import('openai')
-      const c = new OpenAI({ apiKey: process.env.CEREBRAS_API_KEY, baseURL: 'https://api.cerebras.ai/v1' })
-      const r = await c.chat.completions.create({ model: 'llama3.1-70b', messages: ping, max_tokens: 10 })
-      results.cerebras = { ok: true, response: r.choices[0]?.message?.content }
+      // Use raw fetch to bypass any OpenAI SDK URL handling issues
+      const cbRes = await fetch('https://api.cerebras.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.CEREBRAS_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ model: 'llama3.1-8b', messages: ping, max_tokens: 10 }),
+      })
+      const cbBody = await cbRes.text()
+      if (cbRes.ok) {
+        const parsed = JSON.parse(cbBody)
+        results.cerebras = { ok: true, response: parsed.choices?.[0]?.message?.content }
+      } else {
+        results.cerebras = { ok: false, status: cbRes.status, error: cbBody }
+      }
     } catch (err) {
       results.cerebras = { ok: false, error: err.message }
     }
