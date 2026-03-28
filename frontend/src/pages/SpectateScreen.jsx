@@ -19,6 +19,7 @@ export default function SpectateScreen() {
   const [debateStatus, setDebateStatus] = useState('waiting')
   const [currentSpeaker, setCurrentSpeaker] = useState(null)
   const [debateTimer, setDebateTimer] = useState(0)
+  const [liveInterim, setLiveInterim] = useState({ speaker: null, text: '' })
 
   const openingPlayedRef = useRef(false)
   const transcriptEndRef = useRef(null)
@@ -58,6 +59,7 @@ export default function SpectateScreen() {
     transcript: (entry) => {
       setTranscript((prev) => [...prev.slice(-200), entry])
       setCurrentSpeaker(entry.speaker)
+      setLiveInterim(prev => prev.speaker === entry.speaker ? { speaker: null, text: '' } : prev)
     },
     roast: async (payload) => {
       setScores(payload.scores || scores)
@@ -76,6 +78,9 @@ export default function SpectateScreen() {
       if (payload.audioBase64) await playBase64Audio(payload.audioBase64)
     },
     debate_ended: () => setDebateStatus('ended'),
+    interim_transcript: ({ speaker, text }) => {
+      setLiveInterim({ speaker, text })
+    },
   })
 
   useEffect(() => {
@@ -187,6 +192,26 @@ export default function SpectateScreen() {
                 </motion.div>
               ))}
             </AnimatePresence>
+
+            {/* Live interim speech — shown while debater is mid-sentence */}
+            {liveInterim.text && liveInterim.speaker && (
+              <div className={`p-3 rounded-lg opacity-70 border border-dashed ${
+                liveInterim.speaker === d1
+                  ? `${getTheme(d1).border} bg-gradient-to-br ${getTheme(d1).bg}`
+                  : `${getTheme(d2).border} bg-gradient-to-br ${getTheme(d2).bg}`
+              }`}>
+                <div className="flex items-start space-x-3">
+                  <span className={`font-medium text-sm shrink-0 ${
+                    liveInterim.speaker === d1 ? getTheme(d1).text : getTheme(d2).text
+                  }`}>
+                    {liveInterim.speaker}:
+                  </span>
+                  <span className="text-gray-300 italic">{liveInterim.text}</span>
+                  <span className="w-1.5 h-4 bg-gray-400 animate-pulse ml-1 inline-block rounded-sm" />
+                </div>
+              </div>
+            )}
+
             <div ref={transcriptEndRef} />
           </div>
         </div>

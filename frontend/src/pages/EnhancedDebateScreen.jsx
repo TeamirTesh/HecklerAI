@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSocket } from '../hooks/useSocket.js'
-import { useAudio, playBase64Audio } from '../hooks/useAudio.js'
+import { playBase64Audio } from '../hooks/useAudio.js'
+import { useTranscription } from '../hooks/useTranscription.js'
 
 export default function EnhancedDebateScreen() {
   const { roomId } = useParams()
@@ -29,6 +30,8 @@ export default function EnhancedDebateScreen() {
   const [connectedPeers, setConnectedPeers] = useState(new Set())
   const [isHost, setIsHost] = useState(false)
   const [debateTimer, setDebateTimer] = useState(0)
+  const [interimText, setInterimText] = useState('')
+  const [otherInterimText, setOtherInterimText] = useState({ speaker: null, text: '' })
 
   const openingPlayedRef = useRef(false)
   const debateStatusRef = useRef(debateStatus)
@@ -111,6 +114,7 @@ export default function EnhancedDebateScreen() {
     transcript: (entry) => {
       setTranscript((prev) => [...prev.slice(-50), entry])
       setCurrentSpeaker(entry.speaker)
+      setOtherInterimText(prev => prev.speaker === entry.speaker ? { speaker: null, text: '' } : prev)
     },
     roast: async (payload) => {
       // Add to roast alerts
@@ -157,6 +161,9 @@ export default function EnhancedDebateScreen() {
     debate_ended: () => {
       setDebateStatus('ended')
     },
+    interim_transcript: ({ speaker, text }) => {
+      setOtherInterimText({ speaker, text })
+    },
   })
 
   // Join room on mount
@@ -175,43 +182,49 @@ export default function EnhancedDebateScreen() {
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Audio handling — use ref so MediaRecorder's ondataavailable never captures stale debateStatus
-  const handleChunk = useCallback(
-    (base64Chunk) => {
-      if (debateStatusRef.current !== 'active') return
-      emit('audio_chunk', { roomId, speakerName: myName, chunk: base64Chunk })
-    },
-    [emit, roomId, myName]
-  )
+  // When speech is finalized, send text to backend for broadcast + Groq analysis
+  const handleFinal = useCallback((text) => {
+    if (debateStatusRef.current !== 'active') return
+    emit('transcript_text', { roomId, speakerName: myName, text })
+    setInterimText('')
+  }, [emit, roomId, myName])
 
-  const { start: startMic, stop: stopMic, isRecording, error: micError } = useAudio(handleChunk)
+  const handleInterim = useCallback((text) => {
+    setInterimText(text)
+    if (debateStatusRef.current === 'active') {
+      emit('interim_transcript', { roomId, speakerName: myName, text })
+    }
+  }, [emit, roomId, myName])
+
+  const { start: startMic, stop: stopMic, isListening: isRecording, error: micError } = useTranscription(handleFinal, handleInterim)
 
   // Start debate
-  async function handleStartDebate() {
+  function handleStartDebate() {
     emit('start_debate', { roomId }, (res) => {
       if (res?.error) console.error('Start error:', res.error)
     })
-    await startMic()
+    startMic()
   }
 
   // Toggle mic
-  async function handleToggleMic() {
+  function handleToggleMic() {
     if (isRecording) {
       stopMic()
     } else {
-      await startMic()
+      startMic()
     }
   }
 
   // End debate
   function handleEndDebate() {
     stopMic()
+    setInterimText('')
     emit('end_debate', { roomId }, () => {
       navigate(`/summary/${roomId}?d1=${encodeURIComponent(d1)}&d2=${encodeURIComponent(d2)}`)
     })
   }
 
-  // Auto start mic for non-hosts
+  // Auto start mic for non-hosts when debate goes active
   useEffect(() => {
     if (debateStatus === 'active' && !isRecording && !isHost) {
       startMic()
@@ -343,11 +356,11 @@ export default function EnhancedDebateScreen() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 }}
                   className={`p-3 rounded-lg ${
-                    entry.speaker === 'SYSTEM' 
+                    entry.speaker === 'SYSTEM'
                       ? 'bg-gray-800 text-gray-400 text-sm'
                       : entry.speaker === 'AI_ROAST'
                       ? 'bg-red-900/30 border border-red-500/30 text-red-300'
-                      : entry.speaker === d1 
+                      : entry.speaker === d1
                       ? `${getUserTheme(d1).bg} ${getUserTheme(d1).border} border text-white`
                       : `${getUserTheme(d2).bg} ${getUserTheme(d2).border} border text-white`
                   }`}
@@ -366,6 +379,36 @@ export default function EnhancedDebateScreen() {
                 </motion.div>
               ))}
             </AnimatePresence>
+
+            {/* Other speaker's live interim speech */}
+            {otherInterimText.text && (
+              <div className={`p-3 rounded-lg opacity-70 border border-dashed ${
+                otherInterimText.speaker === d1
+                  ? `${getUserTheme(d1).border} ${getUserTheme(d1).bg}`
+                  : `${getUserTheme(d2).border} ${getUserTheme(d2).bg}`
+              }`}>
+                <div className="flex items-start space-x-3">
+                  <span className={`font-medium text-sm ${
+                    otherInterimText.speaker === d1 ? getUserTheme(d1).text : getUserTheme(d2).text
+                  }`}>
+                    {otherInterimText.speaker}:
+                  </span>
+                  <span className="text-gray-300 italic">{otherInterimText.text}</span>
+                  <span className="w-2 h-4 bg-current animate-pulse ml-1 inline-block" />
+                </div>
+              </div>
+            )}
+
+            {/* My own live interim speech */}
+            {interimText && (
+              <div className={`p-3 rounded-lg opacity-70 border border-dashed ${myTheme.border} ${myTheme.bg}`}>
+                <div className="flex items-start space-x-3">
+                  <span className={`font-medium text-sm ${myTheme.text}`}>{myName}:</span>
+                  <span className="text-gray-300 italic">{interimText}</span>
+                  <span className="w-2 h-4 bg-current animate-pulse ml-1 inline-block" />
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

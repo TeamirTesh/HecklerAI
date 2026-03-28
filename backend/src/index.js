@@ -163,6 +163,27 @@ io.on('connection', (socket) => {
     stream.send(buffer)
   })
 
+  // Final transcript text from Web Speech API
+  socket.on('transcript_text', async ({ roomId, speakerName, text }) => {
+    if (!text?.trim()) return
+    io.to(roomId).emit('transcript', { speaker: speakerName, text: text.trim(), timestamp: Date.now() })
+    await pushTranscript(roomId, speakerName, text.trim())
+    await processUtterance({
+      roomId,
+      speaker: speakerName,
+      utterance: text.trim(),
+      onRoast: async (payload) => {
+        console.log(`[Roast] Emitting roast for ${payload.speaker} in ${roomId}`)
+        io.to(roomId).emit('roast', payload)
+      },
+    })
+  })
+
+  // Interim (partial) speech — broadcast to room but NOT back to sender
+  socket.on('interim_transcript', ({ roomId, speakerName, text }) => {
+    socket.to(roomId).emit('interim_transcript', { speaker: speakerName, text })
+  })
+
   // End debate
   socket.on('end_debate', async ({ roomId }, ack) => {
     const room = await updateRoomStatus(roomId, 'ended')
