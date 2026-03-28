@@ -1,23 +1,33 @@
 import OpenAI from 'openai'
 
 // Cerebras — faster than Groq, generous free tier, same Llama 3.3 70B
-// Get a free key at: https://cloud.cerebras.ai
 let aiClient = null
 
 function getGroq() {
   if (!aiClient) {
-    aiClient = new OpenAI({
-      apiKey: process.env.CEREBRAS_API_KEY || process.env.GROQ_API_KEY,
-      baseURL: process.env.CEREBRAS_API_KEY
-        ? 'https://api.cerebras.ai/v1'
-        : 'https://api.groq.com/openai/v1',
-    })
+    const cerebrasKey = process.env.CEREBRAS_API_KEY
+    const groqKey = process.env.GROQ_API_KEY
+    const apiKey = cerebrasKey || groqKey
+
+    if (!apiKey) {
+      console.error('[AI] CRITICAL: No API key found. Set CEREBRAS_API_KEY or GROQ_API_KEY in Railway env vars.')
+      return null
+    }
+
+    const baseURL = cerebrasKey
+      ? 'https://api.cerebras.ai/v1'
+      : 'https://api.groq.com/openai/v1'
+
+    console.log(`[AI] Using ${cerebrasKey ? 'Cerebras' : 'Groq'} — baseURL: ${baseURL}`)
+
+    aiClient = new OpenAI({ apiKey, baseURL })
   }
   return aiClient
 }
 
-// Use Cerebras model name when on Cerebras, Groq model name otherwise
-const MODEL = process.env.CEREBRAS_API_KEY ? 'llama-3.3-70b' : 'llama-3.3-70b-versatile'
+function getModel() {
+  return process.env.CEREBRAS_API_KEY ? 'llama-3.3-70b' : 'llama-3.3-70b-versatile'
+}
 
 const SYSTEM_PROMPTS = {
   easy: `You are DebateRoast — a polite, educational AI debate referee. You monitor live debates and provide calm, constructive feedback when someone argues incorrectly or makes a genuinely good point. You are always respectful, never rude or sarcastic. Focus on education and improvement.
@@ -95,6 +105,12 @@ const getSystemPrompt = (roastLevel) => SYSTEM_PROMPTS[roastLevel] || SYSTEM_PRO
  */
 export async function analyzeUtterance({ topic, debaters, exchanges, speaker, utterance, roastLevel = 'savage' }) {
   const groq = getGroq()
+  if (!groq) {
+    console.error('[AI] Cannot analyze — no API client (missing API key)')
+    return { interrupt: false, reaction_type: 'NONE', type: 'CLEAN' }
+  }
+
+  console.log(`[AI] Analyzing utterance by ${speaker} (level: ${roastLevel}): "${utterance.slice(0, 80)}..."`)
 
   const contextLines = exchanges
     .map((e) => `${e.speaker}: "${e.text}"`)
@@ -113,7 +129,7 @@ Analyze this utterance. Respond ONLY with the JSON object.`
 
   try {
     const completion = await groq.chat.completions.create({
-      model: MODEL,
+      model: getModel(),
       messages: [
         { role: 'system', content: getSystemPrompt(roastLevel) },
         { role: 'user', content: userContent },
@@ -124,11 +140,16 @@ Analyze this utterance. Respond ONLY with the JSON object.`
     })
 
     const raw = completion.choices[0]?.message?.content
-    if (!raw) return { interrupt: false, reaction_type: 'NONE', type: 'CLEAN' }
+    if (!raw) {
+      console.warn('[AI] Empty response from AI')
+      return { interrupt: false, reaction_type: 'NONE', type: 'CLEAN' }
+    }
 
-    return JSON.parse(raw)
+    const result = JSON.parse(raw)
+    console.log(`[AI] Result: interrupt=${result.interrupt}, type=${result.type}`)
+    return result
   } catch (err) {
-    console.error('[Groq] Analysis error:', err.message)
+    console.error('[AI] Analysis error:', err.message)
     return { interrupt: false, reaction_type: 'NONE', type: 'CLEAN' }
   }
 }
@@ -149,7 +170,7 @@ export async function generateDebateAnalytics({ topic, debaters, transcript, roa
 
   try {
     const completion = await groq.chat.completions.create({
-      model: MODEL,
+      model: getModel(),
       messages: [
         {
           role: 'system',
@@ -207,7 +228,7 @@ export async function augmentMessageWithFacts(message, claim, factText) {
   const groq = getGroq()
   try {
     const completion = await groq.chat.completions.create({
-      model: MODEL,
+      model: getModel(),
       messages: [
         {
           role: 'system',

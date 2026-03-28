@@ -184,25 +184,28 @@ io.on('connection', (socket) => {
     const existing = pendingText.get(key) || ''
     pendingText.set(key, existing ? `${existing} ${clean}` : clean)
 
-    // Debounce analysis — reset the 3s timer each time new words arrive.
-    // Only fires 3 seconds after the speaker goes quiet.
+    const level = roastLevel || 'savage'
+    console.log(`[Transcript] ${speakerName} in ${roomId} (level: ${level}): "${clean.slice(0, 60)}"`)
+
+    // Debounce analysis — fires 2s after speaker goes quiet
     if (analysisPending.has(key)) clearTimeout(analysisPending.get(key))
 
     const timer = setTimeout(async () => {
       analysisPending.delete(key)
       const accumulated = pendingText.get(key) || clean
       pendingText.delete(key)
+      console.log(`[Debounce] Firing analysis for ${speakerName}: "${accumulated.slice(0, 80)}"`)
       await processUtterance({
         roomId,
         speaker: speakerName,
         utterance: accumulated,
-        roastLevel: roastLevel || 'savage',
+        roastLevel: level,
         onRoast: async (payload) => {
           console.log(`[Roast] Emitting roast for ${payload.speaker} in ${roomId}`)
           io.to(roomId).emit('roast', payload)
         },
       })
-    }, 3000)
+    }, 2000)
 
     analysisPending.set(key, timer)
   })
@@ -254,6 +257,14 @@ io.on('connection', (socket) => {
 // ── Healthcheck ────────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ ok: true, ts: Date.now() }))
 
+// ── AI key diagnostic ──────────────────────────────────────────────────────────
+app.get('/api/test-ai', async (req, res) => {
+  const cerebrasKey = !!process.env.CEREBRAS_API_KEY
+  const groqKey = !!process.env.GROQ_API_KEY
+  const provider = cerebrasKey ? 'cerebras' : groqKey ? 'groq' : 'NONE'
+  res.json({ cerebrasKey, groqKey, provider, ok: cerebrasKey || groqKey })
+})
+
 // ── Serve frontend static files (production) ──────────────────────────────────
 const frontendDist = join(__dirname, '../../frontend/dist')
 if (existsSync(frontendDist)) {
@@ -263,4 +274,9 @@ if (existsSync(frontendDist)) {
 
 httpServer.listen(PORT, () => {
   console.log(`[Server] DebateRoast backend running on port ${PORT}`)
+  const hasCerebras = !!process.env.CEREBRAS_API_KEY
+  const hasGroq = !!process.env.GROQ_API_KEY
+  if (hasCerebras) console.log('[Server] AI provider: Cerebras ✓')
+  else if (hasGroq) console.log('[Server] AI provider: Groq ✓')
+  else console.error('[Server] ⚠️  NO AI KEY SET — roasts will not fire! Set CEREBRAS_API_KEY or GROQ_API_KEY in Railway env vars.')
 })

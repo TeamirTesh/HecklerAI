@@ -14,7 +14,7 @@ export default function EnhancedDebateScreen() {
   const myName = searchParams.get('name') || 'Debater'
   const d1 = searchParams.get('d1') || 'Debater 1'
   const d2 = searchParams.get('d2') || 'Debater 2'
-  const roastLevel = searchParams.get('roastLevel') || sessionStorage.getItem('roastLevel') || 'intermediate'
+  const roastLevel = searchParams.get('roastLevel') || sessionStorage.getItem('roastLevel') || 'savage'
   
   const [room, setRoom] = useState(null)
   const [transcript, setTranscript] = useState([])

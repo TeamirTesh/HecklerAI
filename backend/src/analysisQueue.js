@@ -21,11 +21,23 @@ import { buildRoastAudio, generateSpeech } from './cartesia.js'
  *   CLEAN                 → discarded immediately, no further work.
  */
 export async function processUtterance({ roomId, speaker, utterance, roastLevel = 'savage', onRoast }) {
-  // Skip very short utterances — likely fragments, not full thoughts
-  if (utterance.trim().split(/\s+/).length < 4) return
+  const wordCount = utterance.trim().split(/\s+/).length
+  if (wordCount < 3) {
+    console.log(`[Analysis] Skipping — too short (${wordCount} words): "${utterance}"`)
+    return
+  }
 
   const room = await getRoom(roomId)
-  if (!room || room.status !== 'active') return
+  if (!room) {
+    console.warn(`[Analysis] Room ${roomId} not found`)
+    return
+  }
+  if (room.status !== 'active') {
+    console.warn(`[Analysis] Room ${roomId} status is "${room.status}", not active — skipping`)
+    return
+  }
+
+  console.log(`[Analysis] Processing utterance by ${speaker} in room ${roomId}`)
 
   // Save to rolling context (capped to last 5 in roomManager)
   await pushExchange(roomId, speaker, utterance)
