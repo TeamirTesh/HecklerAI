@@ -171,7 +171,7 @@ function JoinRoomForm() {
     }
     const room = await res.json()
     // Join also goes through the AI preparation flow  
-    navigate(`/preparing/${upperRoomId}?topic=${encodeURIComponent(room.topic)}&d1=${encodeURIComponent(room.debaters[0])}&d2=${encodeURIComponent(room.debaters[1])}&joining=true`)
+    navigate(`/preparing/${upperRoomId}?topic=${encodeURIComponent(room.topic)}&d1=${encodeURIComponent(room.debaters[0])}&d2=${encodeURIComponent(room.debaters[1])}&joining=true&name=${encodeURIComponent(name.trim())}`)
   }
 
   return (

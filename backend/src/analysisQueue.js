@@ -21,6 +21,12 @@ import { buildRoastAudio, generateSpeech } from './cartesia.js'
  *   CLEAN                 → discarded immediately, no further work.
  */
 export async function processUtterance({ roomId, speaker, utterance, onRoast }) {
+  // Skip very short utterances — likely fragments, not full thoughts
+  if (utterance.trim().split(/\s+/).length < 5) return
+
+  // Wait 2.5s so the full thought lands in context before we analyze
+  await new Promise((r) => setTimeout(r, 2500))
+
   const room = await getRoom(roomId)
   if (!room || room.status !== 'active') return
 
@@ -77,8 +83,8 @@ export async function processUtterance({ roomId, speaker, utterance, onRoast }) 
 
   const scores = await incrementScore(roomId, speaker)
 
-  if (analysis.fallacy_name) {
-    await recordFallacyType(roomId, speaker, analysis.fallacy_name)
+  if (analysis.fallacy_name && typeof analysis.fallacy_name === 'string' && analysis.fallacy_name.trim()) {
+    await recordFallacyType(roomId, speaker, analysis.fallacy_name.trim())
   }
 
   const roastRecord = {

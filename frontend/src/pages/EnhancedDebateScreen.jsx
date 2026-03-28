@@ -137,8 +137,8 @@ export default function EnhancedDebateScreen() {
       setRoastCounter(prev => ({
         totalRoasts: prev.totalRoasts + 1,
         fallacies: payload.fallacyName ? prev.fallacies + 1 : prev.fallacies,
-        factFlags: payload.type === 'fact-check' ? prev.factFlags + 1 : prev.factFlags,
-        interruptions: payload.type === 'interruption' ? prev.interruptions + 1 : prev.interruptions
+        factFlags: payload.type === 'FACTUAL_CLAIM' ? prev.factFlags + 1 : prev.factFlags,
+        interruptions: payload.reactionType === 'ROAST' ? prev.interruptions + 1 : prev.interruptions
       }))
       
       // Update truth scores

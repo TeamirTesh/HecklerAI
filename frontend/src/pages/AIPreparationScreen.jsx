@@ -20,6 +20,8 @@ export default function AIPreparationScreen() {
   const topic = searchParams.get('topic') || 'Debate Topic'
   const d1 = searchParams.get('d1') || 'Debater 1'
   const d2 = searchParams.get('d2') || 'Debater 2'
+  const joining = searchParams.get('joining') === 'true'
+  const joinerName = searchParams.get('name') || d2
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -28,12 +30,16 @@ export default function AIPreparationScreen() {
         setCurrentStep(prev => prev + 1)
       } else {
         clearInterval(interval)
-        // Auto-advance to roast level selection after 1 second
         setTimeout(() => {
-          navigate(`/roast-level/${roomId}?topic=${encodeURIComponent(topic)}&d1=${encodeURIComponent(d1)}&d2=${encodeURIComponent(d2)}`)
+          if (joining) {
+            // Joining client skips roast level — host already chose it
+            navigate(`/debate/${roomId}?name=${encodeURIComponent(joinerName)}&d1=${encodeURIComponent(d1)}&d2=${encodeURIComponent(d2)}`)
+          } else {
+            navigate(`/roast-level/${roomId}?topic=${encodeURIComponent(topic)}&d1=${encodeURIComponent(d1)}&d2=${encodeURIComponent(d2)}`)
+          }
         }, 1000)
       }
-    }, 800) // Each step takes 800ms
+    }, 800)
 
     return () => clearInterval(interval)
   }, [currentStep, navigate, roomId, topic, d1, d2])

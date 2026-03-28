@@ -13,6 +13,89 @@ const ANALYSIS_DIMENSIONS = [
   'Logic', 'Clarity', 'Evidence', 'Relevance', 'Fairness'
 ]
 
+function downloadReport(data, d1, d2) {
+  const { room, roasts, analytics } = data
+  const lines = [
+    'DEBATEROAST — OFFICIAL RESULTS',
+    '================================',
+    `Topic: ${room?.topic || 'Unknown'}`,
+    `Debaters: ${d1} vs ${d2}`,
+    `Date: ${new Date().toLocaleString()}`,
+    '',
+    'SCORES',
+    '------',
+    `${d1}: ${room?.scores?.[d1] || 0} roasts received`,
+    `${d2}: ${room?.scores?.[d2] || 0} roasts received`,
+    '',
+  ]
+
+  if (analytics?.winner) {
+    lines.push(`WINNER: ${analytics.winner}`)
+    lines.push('')
+  }
+
+  if (analytics?.overallSummary) {
+    lines.push('OVERALL VERDICT')
+    lines.push('---------------')
+    lines.push(analytics.overallSummary)
+    lines.push('')
+  }
+
+  if (analytics?.debaterAnalysis) {
+    analytics.debaterAnalysis.forEach((d) => {
+      lines.push(`${d.name.toUpperCase()} ANALYSIS`)
+      lines.push('-'.repeat(d.name.length + 9))
+      lines.push(`Truth Score: ${d.truthScore}%`)
+      lines.push(`Argument Quality: ${d.argumentQuality}%`)
+      lines.push(`Evidence Score: ${d.evidenceScore}%`)
+      lines.push(`Summary: ${d.summary}`)
+      lines.push('Improvements:')
+      d.improvements?.forEach((s) => lines.push(`  • ${s}`))
+      lines.push('')
+    })
+  }
+
+  if (roasts?.length > 0) {
+    lines.push('COMPLETE ROAST LOG')
+    lines.push('------------------')
+    roasts.forEach((r, i) => {
+      lines.push(`#${i + 1} [${new Date(r.timestamp).toLocaleTimeString()}] ${r.speaker}`)
+      if (r.fallacyName) lines.push(`  Fallacy: ${r.fallacyName}`)
+      if (r.type === 'FACTUAL_CLAIM') lines.push(`  Fact Check: ${r.claim}`)
+      lines.push(`  "${r.roast || r.text || r.message}"`)
+      lines.push('')
+    })
+  }
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `debateroast-${room?.topic?.slice(0, 20).replace(/\s+/g, '-') || 'results'}.txt`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function ShareButton() {
+  const [copied, setCopied] = useState(false)
+
+  function handleShare() {
+    navigator.clipboard.writeText(window.location.href).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  return (
+    <button
+      onClick={handleShare}
+      className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-xl transition-colors"
+    >
+      {copied ? '✅ Copied!' : '🔗 Share Results'}
+    </button>
+  )
+}
+
 export default function EnhancedSummaryScreen() {
   const { roomId } = useParams()
   const [searchParams] = useSearchParams()
@@ -183,12 +266,13 @@ export default function EnhancedSummaryScreen() {
           >
             🔥 New Debate
           </button>
-          <button className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-xl transition-colors">
+          <button
+            onClick={() => downloadReport(data, d1, d2)}
+            className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-xl transition-colors"
+          >
             📊 Download Report
           </button>
-          <button className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-xl transition-colors">
-            🔗 Share Results
-          </button>
+          <ShareButton />
         </div>
       </div>
     </div>
@@ -440,7 +524,7 @@ function AnalysisTab({ analysis, roasts }) {
                     {new Date(roast.timestamp).toLocaleTimeString()}
                   </span>
                 </div>
-                <p className="text-gray-300 text-sm">{roast.text || roast.message}</p>
+                <p className="text-gray-300 text-sm">{roast.roast || roast.text || roast.message}</p>
               </div>
             ))}
           </div>
