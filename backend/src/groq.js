@@ -31,7 +31,7 @@ async function callAI(messages, { maxTokens = 400, temperature = 0.9, jsonMode =
   if (cerebras) {
     try {
       const res = await cerebras.chat.completions.create({
-        model: 'llama-3.3-70b',
+        model: 'llama3.3-70b',
         messages,
         temperature,
         max_tokens: maxTokens,
