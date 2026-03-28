@@ -1,15 +1,18 @@
 import { useRef, useCallback, useState } from 'react'
 
-const CHUNK_INTERVAL_MS = 250 // send audio every 250ms
+const SAMPLE_RATE = 16000
 
 /**
- * Hook for capturing microphone audio and streaming it via a callback.
+ * Hook for capturing 16kHz mono PCM audio and streaming it via a callback.
+ * Uses AudioContext + AudioWorkletNode (PCMProcessor) to produce raw Int16 PCM
+ * required by AssemblyAI real-time transcription.
  *
- * @param {function} onChunk - called with base64-encoded audio chunk
+ * @param {function} onChunk - called with base64-encoded Int16 PCM chunk
  * @returns {{ start, stop, isRecording, error }}
  */
 export function useAudio(onChunk) {
-  const mediaRecorderRef = useRef(null)
+  const audioContextRef = useRef(null)
+  const workletNodeRef = useRef(null)
   const streamRef = useRef(null)
   const [isRecording, setIsRecording] = useState(false)
   const [error, setError] = useState(null)
@@ -20,35 +23,32 @@ export function useAudio(onChunk) {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          sampleRate: 48000,
+          channelCount: 1,
+          sampleRate: SAMPLE_RATE,
         },
         video: false,
       })
       streamRef.current = stream
 
-      // Prefer webm/opus — Deepgram handles it well
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : MediaRecorder.isTypeSupported('audio/webm')
-        ? 'audio/webm'
-        : 'audio/ogg;codecs=opus'
+      const audioContext = new AudioContext({ sampleRate: SAMPLE_RATE })
+      audioContextRef.current = audioContext
 
-      const recorder = new MediaRecorder(stream, { mimeType })
-      mediaRecorderRef.current = recorder
+      await audioContext.audioWorklet.addModule('/pcm-processor.js')
 
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
-          const reader = new FileReader()
-          reader.onloadend = () => {
-            // Strip the data URL prefix and get base64
-            const base64 = reader.result.split(',')[1]
-            onChunk(base64)
-          }
-          reader.readAsDataURL(e.data)
-        }
+      const source = audioContext.createMediaStreamSource(stream)
+      const workletNode = new AudioWorkletNode(audioContext, 'pcm-processor')
+      workletNodeRef.current = workletNode
+
+      workletNode.port.onmessage = (e) => {
+        const bytes = new Uint8Array(e.data)
+        let binary = ''
+        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i])
+        onChunk(btoa(binary))
       }
 
-      recorder.start(CHUNK_INTERVAL_MS)
+      source.connect(workletNode)
+      workletNode.connect(audioContext.destination)
+
       setIsRecording(true)
       setError(null)
     } catch (err) {
@@ -58,8 +58,13 @@ export function useAudio(onChunk) {
   }, [onChunk])
 
   const stop = useCallback(() => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop()
+    if (workletNodeRef.current) {
+      workletNodeRef.current.disconnect()
+      workletNodeRef.current = null
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close()
+      audioContextRef.current = null
     }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop())

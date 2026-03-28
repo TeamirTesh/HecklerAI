@@ -10,14 +10,15 @@
   },
   "dependencies": {
     "@deepgram/sdk": "^3.9.0",
+    "assemblyai": "^4.29.0",
+    "axios": "^1.7.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "groq-sdk": "^0.8.0",
     "ioredis": "^5.4.1",
     "socket.io": "^4.7.5",
-    "uuid": "^10.0.0",
-    "axios": "^1.7.7"
+    "uuid": "^10.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"

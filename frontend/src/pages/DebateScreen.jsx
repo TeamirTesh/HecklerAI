@@ -29,6 +29,10 @@ export default function DebateScreen() {
   // Track if we've played the opening
   const openingPlayedRef = useRef(false)
 
+  // Ref so handleChunk always reads current debateStatus without recreating
+  const debateStatusRef = useRef(debateStatus)
+  useEffect(() => { debateStatusRef.current = debateStatus }, [debateStatus])
+
   // ── Socket handlers ──────────────────────────────────────────────────────────
   const { emit } = useSocket({
     peer_joined: ({ speakerName }) => {
@@ -100,10 +104,10 @@ export default function DebateScreen() {
   // ── Audio chunk handler ──────────────────────────────────────────────────────
   const handleChunk = useCallback(
     (base64Chunk) => {
-      if (debateStatus !== 'active') return
+      if (debateStatusRef.current !== 'active') return
       emit('audio_chunk', { roomId, speakerName: myName, chunk: base64Chunk })
     },
-    [emit, roomId, myName, debateStatus]
+    [emit, roomId, myName] // debateStatusRef is a ref — no need in deps
   )
 
   const { start: startMic, stop: stopMic, isRecording, error: micError } = useAudio(handleChunk)
