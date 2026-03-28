@@ -31,6 +31,7 @@ export default function EnhancedDebateScreen() {
   const [debateTimer, setDebateTimer] = useState(0)
 
   const openingPlayedRef = useRef(false)
+  const debateStatusRef = useRef(debateStatus)
 
   // Get user color theme
   const getUserTheme = (debaterName) => {
@@ -58,6 +59,9 @@ export default function EnhancedDebateScreen() {
   }
 
   const myTheme = getUserTheme(myName)
+
+  // Keep debateStatusRef in sync so handleChunk never has a stale closure
+  useEffect(() => { debateStatusRef.current = debateStatus }, [debateStatus])
 
   // Timer effect
   useEffect(() => {
@@ -169,13 +173,13 @@ export default function EnhancedDebateScreen() {
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Audio handling
+  // Audio handling — use ref so MediaRecorder's ondataavailable never captures stale debateStatus
   const handleChunk = useCallback(
     (base64Chunk) => {
-      if (debateStatus !== 'active') return
+      if (debateStatusRef.current !== 'active') return
       emit('audio_chunk', { roomId, speakerName: myName, chunk: base64Chunk })
     },
-    [emit, roomId, myName, debateStatus]
+    [emit, roomId, myName]
   )
 
   const { start: startMic, stop: stopMic, isRecording, error: micError } = useAudio(handleChunk)

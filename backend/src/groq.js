@@ -77,6 +77,72 @@ Analyze this utterance. Is there a logical fallacy or a verifiable factual claim
 }
 
 /**
+ * Analyze the full debate transcript and generate real analytics for the summary screen.
+ */
+export async function generateDebateAnalytics({ topic, debaters, transcript, roasts, scores, fallacyTypes }) {
+  const groq = getGroq()
+
+  const transcriptText = transcript
+    .map((e) => `${e.speaker}: "${e.text}"`)
+    .join('\n') || '(no transcript recorded)'
+
+  const roastSummary = roasts.length > 0
+    ? roasts.map((r) => `- ${r.speaker}: ${r.fallacyName || r.type}`).join('\n')
+    : '(none)'
+
+  try {
+    const completion = await groq.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      messages: [
+        {
+          role: 'system',
+          content: `You are an expert debate analyst. Analyze the debate transcript and return ONLY a JSON object in this exact format:
+{
+  "winner": "debater name or null if tie",
+  "overallSummary": "2-3 sentence summary of the debate",
+  "debaterAnalysis": [
+    {
+      "name": "debater name",
+      "truthScore": 0-100,
+      "argumentQuality": 0-100,
+      "evidenceScore": 0-100,
+      "manipulationScore": 0-100,
+      "dimensions": { "Logic": 0-100, "Clarity": 0-100, "Evidence": 0-100, "Relevance": 0-100, "Fairness": 0-100 },
+      "summary": "2-3 sentence analysis of their specific performance",
+      "improvements": ["specific suggestion 1", "specific suggestion 2", "specific suggestion 3"]
+    }
+  ]
+}
+Base scores on the actual transcript content. Be honest and specific.`,
+        },
+        {
+          role: 'user',
+          content: `TOPIC: ${topic}
+DEBATERS: ${debaters.join(' vs ')}
+
+TRANSCRIPT:
+${transcriptText}
+
+ROASTS/FALLACIES CAUGHT:
+${roastSummary}
+
+ROAST COUNTS (more roasts = worse): ${debaters.map((d) => `${d}: ${scores[d] || 0}`).join(', ')}`,
+        },
+      ],
+      temperature: 0.3,
+      max_tokens: 1500,
+      response_format: { type: 'json_object' },
+    })
+
+    const raw = completion.choices[0]?.message?.content
+    return JSON.parse(raw)
+  } catch (err) {
+    console.error('[Groq] Analytics error:', err.message)
+    return null
+  }
+}
+
+/**
  * Rewrite a roast to call out the specific wrong claim using real facts
  * retrieved from Tavily.
  *

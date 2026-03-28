@@ -2,6 +2,8 @@
 const rooms = new Map()       // roomId → RoomState
 const exchanges = new Map()   // roomId → exchange[]
 const roasts = new Map()      // roomId → roastRecord[]
+const transcripts = new Map() // roomId → {speaker, text, ts}[]
+const analytics = new Map()   // roomId → analytics object
 
 const MAX_EXCHANGES = 5
 
@@ -18,7 +20,26 @@ export async function createRoom({ roomId, topic, debater1, debater2 }) {
   rooms.set(roomId, room)
   exchanges.set(roomId, [])
   roasts.set(roomId, [])
+  transcripts.set(roomId, [])
   return room
+}
+
+export async function pushTranscript(roomId, speaker, text) {
+  const list = transcripts.get(roomId) ?? []
+  list.push({ speaker, text, ts: Date.now() })
+  transcripts.set(roomId, list)
+}
+
+export async function getTranscript(roomId) {
+  return transcripts.get(roomId) ?? []
+}
+
+export async function storeAnalytics(roomId, data) {
+  analytics.set(roomId, data)
+}
+
+export async function getAnalytics(roomId) {
+  return analytics.get(roomId) ?? null
 }
 
 export async function getRoom(roomId) {

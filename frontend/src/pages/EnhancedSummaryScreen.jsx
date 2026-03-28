@@ -25,59 +25,25 @@ export default function EnhancedSummaryScreen() {
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState('overview')
 
-  // Generate mock comprehensive data (in real app this would come from backend)
-  const generateMockAnalysis = (roasts, debaters) => {
-    const analysis = {
-      duration: Math.floor(Math.random() * 20) + 10, // 10-30 minutes
-      totalIssues: roasts?.length || Math.floor(Math.random() * 15) + 5,
-      roastMode: sessionStorage.getItem('roastLevel') || 'intermediate',
-      
-      debaterAnalysis: debaters.map(name => ({
-        name,
-        truthScore: Math.floor(Math.random() * 30) + 70, // 70-100
-        argumentQuality: Math.floor(Math.random() * 30) + 70,
-        fallacyCount: Math.floor(Math.random() * 8) + 2,
-        evidenceScore: Math.floor(Math.random() * 25) + 60,
-        manipulationScore: Math.floor(Math.random() * 40) + 10, // lower is better
-        interruptions: Math.floor(Math.random() * 6) + 1,
-        
-        // Radar chart dimensions
-        dimensions: {
-          Logic: Math.floor(Math.random() * 30) + 70,
-          Clarity: Math.floor(Math.random() * 30) + 70,
-          Evidence: Math.floor(Math.random() * 30) + 70,
-          Relevance: Math.floor(Math.random() * 30) + 70,
-          Fairness: Math.floor(Math.random() * 30) + 70,
-        },
-
-        // Fallacy breakdown
-        fallacies: FALLACY_TYPES.reduce((acc, fallacy) => {
-          acc[fallacy] = Math.floor(Math.random() * 3)
-          return acc
-        }, {}),
-
-        // Time-based scores (for line chart)
-        timeScores: Array.from({length: 10}, () => Math.floor(Math.random() * 30) + 70)
-      }))
-    }
-
-    return analysis
-  }
-
   useEffect(() => {
     const fetchData = async () => {
       try {
         const res = await fetch(`${BACKEND_URL}/api/rooms/${roomId}/summary`)
         if (!res.ok) throw new Error('Failed to fetch')
         const summaryData = await res.json()
-        
-        // Generate enhanced analysis
-        const enhancedData = {
-          ...summaryData,
-          analysis: generateMockAnalysis(summaryData.roasts, [d1, d2])
+
+        // If analytics aren't ready yet (Groq still processing), poll once after 3s
+        if (!summaryData.analytics) {
+          setTimeout(async () => {
+            try {
+              const retry = await fetch(`${BACKEND_URL}/api/rooms/${roomId}/summary`)
+              const retryData = await retry.json()
+              setData({ ...retryData, roastMode: sessionStorage.getItem('roastLevel') || 'standard' })
+            } catch (_) {}
+          }, 3000)
         }
-        
-        setData(enhancedData)
+
+        setData({ ...summaryData, roastMode: sessionStorage.getItem('roastLevel') || 'standard' })
       } catch (e) {
         setError(e.message)
       } finally {
@@ -117,7 +83,20 @@ export default function EnhancedSummaryScreen() {
     )
   }
 
-  const { room, roasts, analysis } = data
+  const { room, roasts, analytics: groqAnalytics, roastMode } = data
+  const analysis = groqAnalytics ? {
+    ...groqAnalytics,
+    duration: Math.round((Date.now() - room.createdAt) / 60000),
+    totalIssues: roasts?.length || 0,
+    roastMode,
+    debaterAnalysis: groqAnalytics.debaterAnalysis?.map(d => ({
+      ...d,
+      fallacyCount: room.scores?.[d.name] || 0,
+      interruptions: Object.values(room.fallacyTypes?.[d.name] || {}).reduce((a, b) => a + b, 0),
+      fallacies: FALLACY_TYPES.reduce((acc, f) => ({ ...acc, [f]: room.fallacyTypes?.[d.name]?.[f] || 0 }), {}),
+    }))
+  } : null
+
   const getUserTheme = (name) => {
     return name === d1 ? {
       primary: 'blue',
@@ -405,21 +384,6 @@ function PerformanceTab({ analysis, getUserTheme }) {
 
 // Analysis Tab Component
 function AnalysisTab({ analysis, roasts }) {
-  const improvements = {
-    [analysis?.debaterAnalysis?.[0]?.name]: [
-      "Use more evidence before making causal claims",
-      "Avoid responding with emotional redirection", 
-      "Support claims with concrete examples",
-      "Stay focused on the main topic"
-    ],
-    [analysis?.debaterAnalysis?.[1]?.name]: [
-      "Let the other speaker finish before rebutting",
-      "Address the argument, not the person",
-      "Provide sources for your statistics",
-      "Use logical structure in your responses"
-    ]
-  }
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -429,21 +393,32 @@ function AnalysisTab({ analysis, roasts }) {
     >
       <h2 className="text-3xl font-bold text-white text-center mb-8">AI Analysis & Recommendations</h2>
 
-      {/* Written Analysis */}
+      {!analysis && (
+        <div className="text-center text-gray-400 py-12">
+          <div className="animate-spin w-8 h-8 border-4 border-red-500/20 border-t-red-500 rounded-full mx-auto mb-4" />
+          <p>Groq is analyzing the debate transcript...</p>
+        </div>
+      )}
+
+      {/* Overall summary from Groq */}
+      {analysis?.overallSummary && (
+        <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-6 text-center">
+          <h3 className="text-lg font-semibold text-red-400 mb-2">Overall Verdict</h3>
+          <p className="text-gray-200 text-lg leading-relaxed">{analysis.overallSummary}</p>
+        </div>
+      )}
+
+      {/* Per-debater analysis from Groq */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {analysis?.debaterAnalysis?.map((debater) => (
           <div key={debater.name} className="bg-gray-900/60 border border-gray-800 rounded-2xl p-6">
             <h3 className="text-xl font-bold text-white mb-4">{debater.name} Analysis</h3>
-            <p className="text-gray-300 leading-relaxed mb-4">
-              {debater.truthScore > 80 ? "Strong performance with high factual accuracy. " : "Some factual inconsistencies detected. "}
-              {debater.argumentQuality > 80 ? "Well-structured arguments throughout the debate. " : "Arguments could benefit from better organization. "}
-              {debater.fallacyCount < 3 ? "Maintained logical reasoning with minimal fallacies." : `Used ${debater.fallacyCount} logical fallacies, particularly affecting argument strength.`}
-            </p>
-            
+            <p className="text-gray-300 leading-relaxed mb-4">{debater.summary}</p>
+
             <div className="bg-gray-800/50 rounded-lg p-4">
               <h4 className="text-lg font-semibold text-green-400 mb-2">Improvement Suggestions</h4>
               <ul className="space-y-2">
-                {improvements[debater.name]?.map((suggestion, index) => (
+                {debater.improvements?.map((suggestion, index) => (
                   <li key={index} className="flex items-start space-x-2 text-gray-300 text-sm">
                     <span className="text-green-400 mt-1">•</span>
                     <span>{suggestion}</span>

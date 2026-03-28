@@ -15,10 +15,15 @@ import {
   updateRoomStatus,
   getRoasts,
   deleteRoom,
+  pushTranscript,
+  getTranscript,
+  storeAnalytics,
+  getAnalytics,
 } from './roomManager.js'
 import { createDeepgramStream } from './deepgram.js'
 import { processUtterance } from './analysisQueue.js'
 import { generateOpeningAnnouncement } from './cartesia.js'
+import { generateDebateAnalytics } from './groq.js'
 
 const PORT = process.env.PORT || 3001
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173'
@@ -55,8 +60,11 @@ app.get('/api/rooms/:roomId', async (req, res) => {
 app.get('/api/rooms/:roomId/summary', async (req, res) => {
   const room = await getRoom(req.params.roomId)
   if (!room) return res.status(404).json({ error: 'Room not found' })
-  const roasts = await getRoasts(req.params.roomId)
-  res.json({ room, roasts })
+  const [roasts, analyticsData] = await Promise.all([
+    getRoasts(req.params.roomId),
+    getAnalytics(req.params.roomId),
+  ])
+  res.json({ room, roasts, analytics: analyticsData })
 })
 
 // ── In-memory: active Deepgram streams per socket ─────────────────────────────
@@ -124,6 +132,8 @@ io.on('connection', (socket) => {
             text: transcript,
             timestamp: Date.now(),
           })
+          // Store full transcript for end-of-debate analytics
+          await pushTranscript(roomId, speaker, transcript)
 
           // Run analysis pipeline
           await processUtterance({
@@ -152,9 +162,25 @@ io.on('connection', (socket) => {
 
   // End debate
   socket.on('end_debate', async ({ roomId }, ack) => {
-    await updateRoomStatus(roomId, 'ended')
+    const room = await updateRoomStatus(roomId, 'ended')
     io.to(roomId).emit('debate_ended', { roomId })
     ack?.({ ok: true })
+
+    // Generate real analytics in the background
+    if (room) {
+      const [transcript, roasts] = await Promise.all([getTranscript(roomId), getRoasts(roomId)])
+      console.log(`[Analytics] Generating analytics for room ${roomId}`)
+      const analyticsData = await generateDebateAnalytics({
+        topic: room.topic,
+        debaters: room.debaters,
+        transcript,
+        roasts,
+        scores: room.scores,
+        fallacyTypes: room.fallacyTypes,
+      })
+      if (analyticsData) await storeAnalytics(roomId, analyticsData)
+      console.log(`[Analytics] Done for room ${roomId}`)
+    }
   })
 
   // Cleanup on disconnect
