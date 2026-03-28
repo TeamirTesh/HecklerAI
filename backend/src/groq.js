@@ -1,8 +1,7 @@
 import OpenAI from 'openai'
+import axios from 'axios'
 
-// Always use Groq — proven to work. Cerebras had 404 issues with model endpoint.
 let groqClient = null
-let cerebrasClient = null
 
 function getGroqClient() {
   if (!groqClient) {
@@ -13,34 +12,37 @@ function getGroqClient() {
   return groqClient
 }
 
-function getCerebrasClient() {
-  if (!cerebrasClient) {
-    const key = process.env.CEREBRAS_API_KEY
-    if (!key) return null
-    cerebrasClient = new OpenAI({ apiKey: key, baseURL: 'https://api.cerebras.ai/v1' })
-  }
-  return cerebrasClient
-}
-
-// Try Cerebras first (faster, no daily limit), fall back to Groq
+// Try Cerebras first (faster, no daily limit) via direct axios — fall back to Groq
 async function callAI(messages, { maxTokens = 400, temperature = 0.9, jsonMode = true } = {}) {
-  const responseFormat = jsonMode ? { response_format: { type: 'json_object' } } : {}
+  const cerebrasKey = process.env.CEREBRAS_API_KEY
 
-  // Try Cerebras first
-  const cerebras = getCerebrasClient()
-  if (cerebras) {
+  if (cerebrasKey) {
     try {
-      const res = await cerebras.chat.completions.create({
-        model: 'llama3.1-70b',
+      const body = {
+        model: 'llama3.1-8b',
         messages,
         temperature,
         max_tokens: maxTokens,
-        ...responseFormat,
-      })
+      }
+      if (jsonMode) body.response_format = { type: 'json_object' }
+
+      const res = await axios.post(
+        'https://api.cerebras.ai/v1/chat/completions',
+        body,
+        {
+          headers: {
+            Authorization: `Bearer ${cerebrasKey}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 15000,
+        }
+      )
       console.log('[AI] Cerebras success')
-      return res.choices[0]?.message?.content
+      return res.data.choices?.[0]?.message?.content
     } catch (err) {
-      console.warn(`[AI] Cerebras failed (${err.status || err.message}), falling back to Groq`)
+      const status = err.response?.status
+      const detail = err.response?.data ? JSON.stringify(err.response.data) : err.message
+      console.warn(`[AI] Cerebras failed (${status || err.message}): ${detail} — falling back to Groq`)
     }
   }
 
@@ -51,13 +53,14 @@ async function callAI(messages, { maxTokens = 400, temperature = 0.9, jsonMode =
     return null
   }
   try {
-    const res = await groq.chat.completions.create({
+    const opts = {
       model: 'llama-3.3-70b-versatile',
       messages,
       temperature,
       max_tokens: maxTokens,
-      ...responseFormat,
-    })
+    }
+    if (jsonMode) opts.response_format = { type: 'json_object' }
+    const res = await groq.chat.completions.create(opts)
     console.log('[AI] Groq success')
     return res.choices[0]?.message?.content
   } catch (err) {
