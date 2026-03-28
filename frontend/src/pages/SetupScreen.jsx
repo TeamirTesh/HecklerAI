@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001'
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || window.location.origin
 
 export default function SetupScreen() {
   const navigate = useNavigate()
@@ -32,7 +32,8 @@ export default function SetupScreen() {
       })
       if (!res.ok) throw new Error('Failed to create room')
       const { roomId } = await res.json()
-      navigate(`/debate/${roomId}?name=${encodeURIComponent(debater1.trim())}&d1=${encodeURIComponent(debater1.trim())}&d2=${encodeURIComponent(debater2.trim())}`)
+      // Navigate to AI preparation screen first
+      navigate(`/preparing/${roomId}?topic=${encodeURIComponent(topic.trim())}&d1=${encodeURIComponent(debater1.trim())}&d2=${encodeURIComponent(debater2.trim())}`)
     } catch (err) {
       setError(err.message)
       setLoading(false)
@@ -54,7 +55,7 @@ export default function SetupScreen() {
             DEBATE<span className="text-white">ROAST</span>
           </h1>
           <p className="text-gray-400 text-lg mt-2 font-medium">
-            🔥 The only debate where BS gets called out in real time 🔥
+            Real-time AI accountability for live debates.
           </p>
         </motion.div>
 
@@ -135,6 +136,16 @@ export default function SetupScreen() {
         >
           <JoinRoomForm />
         </motion.div>
+
+        {/* Spectate existing room */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.6 }}
+          className="mt-3 text-center"
+        >
+          <SpectateForm />
+        </motion.div>
       </div>
     </div>
   )
@@ -159,7 +170,8 @@ function JoinRoomForm() {
       return
     }
     const room = await res.json()
-    navigate(`/debate/${upperRoomId}?name=${encodeURIComponent(name.trim())}&d1=${encodeURIComponent(room.debaters[0])}&d2=${encodeURIComponent(room.debaters[1])}`)
+    // Join also goes through the AI preparation flow  
+    navigate(`/preparing/${upperRoomId}?topic=${encodeURIComponent(room.topic)}&d1=${encodeURIComponent(room.debaters[0])}&d2=${encodeURIComponent(room.debaters[1])}&joining=true`)
   }
 
   return (
@@ -190,6 +202,52 @@ function JoinRoomForm() {
           className="bg-gray-700 hover:bg-gray-600 text-white text-sm py-2 rounded-lg transition"
         >
           Join Room
+        </button>
+      </form>
+    </details>
+  )
+}
+
+function SpectateForm() {
+  const navigate = useNavigate()
+  const [roomId, setRoomId] = useState('')
+  const [error, setError] = useState(null)
+
+  async function handleSpectate(e) {
+    e.preventDefault()
+    if (!roomId.trim()) {
+      setError('Room code required')
+      return
+    }
+    const upperRoomId = roomId.trim().toUpperCase()
+    const res = await fetch(`${BACKEND_URL}/api/rooms/${upperRoomId}`)
+    if (!res.ok) {
+      setError('Room not found')
+      return
+    }
+    const room = await res.json()
+    navigate(`/spectate/${upperRoomId}?d1=${encodeURIComponent(room.debaters[0])}&d2=${encodeURIComponent(room.debaters[1])}`)
+  }
+
+  return (
+    <details className="group">
+      <summary className="cursor-pointer text-gray-500 hover:text-blue-400 text-sm transition select-none">
+        👁 Want to watch? Spectate a debate ▾
+      </summary>
+      <form onSubmit={handleSpectate} className="mt-3 flex gap-2 flex-col">
+        <input
+          type="text"
+          value={roomId}
+          onChange={(e) => setRoomId(e.target.value)}
+          placeholder="Room code (e.g. AB12CD34)"
+          className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        />
+        {error && <p className="text-red-400 text-xs">{error}</p>}
+        <button
+          type="submit"
+          className="bg-blue-700 hover:bg-blue-600 text-white text-sm py-2 rounded-lg transition"
+        >
+          👁 Watch as Spectator
         </button>
       </form>
     </details>

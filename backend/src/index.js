@@ -4,16 +4,26 @@ import { createServer } from 'http'
 import { Server } from 'socket.io'
 import cors from 'cors'
 import { v4 as uuidv4 } from 'uuid'
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
+import { existsSync } from 'fs'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 import {
   createRoom,
   getRoom,
   updateRoomStatus,
   getRoasts,
   deleteRoom,
+  pushTranscript,
+  getTranscript,
+  storeAnalytics,
+  getAnalytics,
 } from './roomManager.js'
 import { createDeepgramStream } from './transcription.js'
 import { processUtterance } from './analysisQueue.js'
 import { generateOpeningAnnouncement } from './cartesia.js'
+import { generateDebateAnalytics } from './groq.js'
 
 const PORT = process.env.PORT || 3001
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173'
@@ -50,8 +60,11 @@ app.get('/api/rooms/:roomId', async (req, res) => {
 app.get('/api/rooms/:roomId/summary', async (req, res) => {
   const room = await getRoom(req.params.roomId)
   if (!room) return res.status(404).json({ error: 'Room not found' })
-  const roasts = await getRoasts(req.params.roomId)
-  res.json({ room, roasts })
+  const [roasts, analyticsData] = await Promise.all([
+    getRoasts(req.params.roomId),
+    getAnalytics(req.params.roomId),
+  ])
+  res.json({ room, roasts, analytics: analyticsData })
 })
 
 // ── In-memory: active Deepgram streams per socket ─────────────────────────────
@@ -62,8 +75,8 @@ const activeStreams = new Map()
 io.on('connection', (socket) => {
   console.log(`[Socket] Connected: ${socket.id}`)
 
-  // Debater joins a room
-  socket.on('join_room', async ({ roomId, speakerName }, ack) => {
+  // Debater (or spectator) joins a room
+  socket.on('join_room', async ({ roomId, speakerName, isSpectator }, ack) => {
     const room = await getRoom(roomId)
     if (!room) {
       ack?.({ error: 'Room not found' })
@@ -72,9 +85,14 @@ io.on('connection', (socket) => {
     socket.join(roomId)
     socket.data.roomId = roomId
     socket.data.speakerName = speakerName
+    socket.data.isSpectator = !!isSpectator
 
-    console.log(`[Socket] ${speakerName} joined room ${roomId}`)
-    socket.to(roomId).emit('peer_joined', { speakerName })
+    if (isSpectator) {
+      console.log(`[Socket] Spectator joined room ${roomId}`)
+    } else {
+      console.log(`[Socket] ${speakerName} joined room ${roomId}`)
+      socket.to(roomId).emit('peer_joined', { speakerName })
+    }
     ack?.({ ok: true, room })
   })
 
@@ -88,13 +106,16 @@ io.on('connection', (socket) => {
 
     console.log(`[Socket] Starting debate in room ${roomId}`)
 
-    // Generate opening announcement
-    const audioBuffer = await generateOpeningAnnouncement()
-    io.to(roomId).emit('debate_started', {
-      room,
-      openingAudioBase64: audioBuffer ? audioBuffer.toString('base64') : null,
-    })
+    // Emit debate_started IMMEDIATELY so the mic and debateStatus activate without delay
+    io.to(roomId).emit('debate_started', { room, openingAudioBase64: null })
     ack?.({ ok: true })
+
+    // Generate opening audio in background — send when ready (non-blocking)
+    generateOpeningAnnouncement().then((audioBuffer) => {
+      if (audioBuffer) {
+        io.to(roomId).emit('opening_audio', { audioBase64: audioBuffer.toString('base64') })
+      }
+    })
   })
 
   // Audio chunk from a debater's mic
@@ -114,6 +135,8 @@ io.on('connection', (socket) => {
             text: transcript,
             timestamp: Date.now(),
           })
+          // Store full transcript for end-of-debate analytics
+          await pushTranscript(roomId, speaker, transcript)
 
           // Run analysis pipeline
           await processUtterance({
@@ -142,9 +165,25 @@ io.on('connection', (socket) => {
 
   // End debate
   socket.on('end_debate', async ({ roomId }, ack) => {
-    await updateRoomStatus(roomId, 'ended')
+    const room = await updateRoomStatus(roomId, 'ended')
     io.to(roomId).emit('debate_ended', { roomId })
     ack?.({ ok: true })
+
+    // Generate real analytics in the background
+    if (room) {
+      const [transcript, roasts] = await Promise.all([getTranscript(roomId), getRoasts(roomId)])
+      console.log(`[Analytics] Generating analytics for room ${roomId}`)
+      const analyticsData = await generateDebateAnalytics({
+        topic: room.topic,
+        debaters: room.debaters,
+        transcript,
+        roasts,
+        scores: room.scores,
+        fallacyTypes: room.fallacyTypes,
+      })
+      if (analyticsData) await storeAnalytics(roomId, analyticsData)
+      console.log(`[Analytics] Done for room ${roomId}`)
+    }
   })
 
   // Cleanup on disconnect
@@ -155,7 +194,7 @@ io.on('connection', (socket) => {
       streamData.stream.close()
       activeStreams.delete(socket.id)
     }
-    if (socket.data.speakerName && socket.data.roomId) {
+    if (socket.data.speakerName && socket.data.roomId && !socket.data.isSpectator) {
       socket.to(socket.data.roomId).emit('peer_left', {
         speakerName: socket.data.speakerName,
       })
@@ -165,6 +204,13 @@ io.on('connection', (socket) => {
 
 // ── Healthcheck ────────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ ok: true, ts: Date.now() }))
+
+// ── Serve frontend static files (production) ──────────────────────────────────
+const frontendDist = join(__dirname, '../../frontend/dist')
+if (existsSync(frontendDist)) {
+  app.use(express.static(frontendDist))
+  app.get('*', (req, res) => res.sendFile(join(frontendDist, 'index.html')))
+}
 
 httpServer.listen(PORT, () => {
   console.log(`[Server] DebateRoast backend running on port ${PORT}`)
