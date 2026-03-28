@@ -50,15 +50,20 @@ async function callAI(messages, { maxTokens = 400, temperature = 0.9, jsonMode =
     console.error('[AI] CRITICAL: No working API client. Set GROQ_API_KEY or CEREBRAS_API_KEY.')
     return null
   }
-  const res = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
-    messages,
-    temperature,
-    max_tokens: maxTokens,
-    ...responseFormat,
-  })
-  console.log('[AI] Groq success')
-  return res.choices[0]?.message?.content
+  try {
+    const res = await groq.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      messages,
+      temperature,
+      max_tokens: maxTokens,
+      ...responseFormat,
+    })
+    console.log('[AI] Groq success')
+    return res.choices[0]?.message?.content
+  } catch (err) {
+    console.error(`[AI] Groq failed (${err.status || err.message}) — both providers failed, no roast`)
+    return null
+  }
 }
 
 const SYSTEM_PROMPTS = {

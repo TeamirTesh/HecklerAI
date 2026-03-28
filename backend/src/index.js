@@ -258,12 +258,38 @@ io.on('connection', (socket) => {
 // ── Healthcheck ────────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ ok: true, ts: Date.now() }))
 
-// ── AI key diagnostic ──────────────────────────────────────────────────────────
+// ── AI live diagnostic — actually calls both providers ─────────────────────────
 app.get('/api/test-ai', async (req, res) => {
-  const cerebrasKey = !!process.env.CEREBRAS_API_KEY
-  const groqKey = !!process.env.GROQ_API_KEY
-  const provider = cerebrasKey ? 'cerebras' : groqKey ? 'groq' : 'NONE'
-  res.json({ cerebrasKey, groqKey, provider, ok: cerebrasKey || groqKey })
+  const ping = [{ role: 'user', content: 'Say "ok" and nothing else.' }]
+  const results = {}
+
+  if (process.env.CEREBRAS_API_KEY) {
+    try {
+      const { default: OpenAI } = await import('openai')
+      const c = new OpenAI({ apiKey: process.env.CEREBRAS_API_KEY, baseURL: 'https://api.cerebras.ai/v1' })
+      const r = await c.chat.completions.create({ model: 'llama3.3-70b', messages: ping, max_tokens: 10 })
+      results.cerebras = { ok: true, response: r.choices[0]?.message?.content }
+    } catch (err) {
+      results.cerebras = { ok: false, error: err.message }
+    }
+  } else {
+    results.cerebras = { ok: false, error: 'no key set' }
+  }
+
+  if (process.env.GROQ_API_KEY) {
+    try {
+      const { default: OpenAI } = await import('openai')
+      const g = new OpenAI({ apiKey: process.env.GROQ_API_KEY, baseURL: 'https://api.groq.com/openai/v1' })
+      const r = await g.chat.completions.create({ model: 'llama-3.3-70b-versatile', messages: ping, max_tokens: 10 })
+      results.groq = { ok: true, response: r.choices[0]?.message?.content }
+    } catch (err) {
+      results.groq = { ok: false, error: err.message }
+    }
+  } else {
+    results.groq = { ok: false, error: 'no key set' }
+  }
+
+  res.json(results)
 })
 
 // ── Serve frontend static files (production) ──────────────────────────────────
