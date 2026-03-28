@@ -11,7 +11,7 @@ import {
   getRoasts,
   deleteRoom,
 } from './roomManager.js'
-import { createDeepgramStream } from './deepgram.js'
+import { createDeepgramStream } from './transcription.js'
 import { processUtterance } from './analysisQueue.js'
 import { generateOpeningAnnouncement } from './cartesia.js'
 
