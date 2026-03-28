@@ -1,0 +1,34 @@
+# Environment & secrets (commit .env.example only)
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p12
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Logs & caches
+*.log
+npm-debug.log*
+.npm
+.cache
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env / tooling (optional local overrides)
+.python-version
+.venv/
+venv/
+
+# Claude Code local settings
+.claude/
