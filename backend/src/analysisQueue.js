@@ -20,7 +20,7 @@ import { buildRoastAudio, generateSpeech } from './cartesia.js'
  *                           Message is augmented with real facts, then message TTS fires. (~2–3s)
  *   CLEAN                 → discarded immediately, no further work.
  */
-export async function processUtterance({ roomId, speaker, utterance, onRoast }) {
+export async function processUtterance({ roomId, speaker, utterance, roastLevel = 'savage', onRoast }) {
   // Skip very short utterances — likely fragments, not full thoughts
   if (utterance.trim().split(/\s+/).length < 4) return
 
@@ -38,6 +38,7 @@ export async function processUtterance({ roomId, speaker, utterance, onRoast }) 
     exchanges,
     speaker,
     utterance,
+    roastLevel,
   })
 
   if (!analysis.interrupt) return

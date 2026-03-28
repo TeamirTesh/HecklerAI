@@ -187,9 +187,9 @@ export default function EnhancedDebateScreen() {
   // When speech is finalized, send text to backend for broadcast + Groq analysis
   const handleFinal = useCallback((text) => {
     if (debateStatusRef.current !== 'active') return
-    emit('transcript_text', { roomId, speakerName: myName, text })
+    emit('transcript_text', { roomId, speakerName: myName, text, roastLevel })
     setInterimText('')
-  }, [emit, roomId, myName])
+  }, [emit, roomId, myName, roastLevel])
 
   const handleInterim = useCallback((text) => {
     setInterimText(text)

@@ -168,7 +168,7 @@ io.on('connection', (socket) => {
   })
 
   // Final transcript text from Web Speech API
-  socket.on('transcript_text', async ({ roomId, speakerName, text }) => {
+  socket.on('transcript_text', async ({ roomId, speakerName, text, roastLevel }) => {
     if (!text?.trim()) return
     const clean = text.trim()
 
@@ -187,6 +187,7 @@ io.on('connection', (socket) => {
         roomId,
         speaker: speakerName,
         utterance: clean,
+        roastLevel: roastLevel || 'savage',
         onRoast: async (payload) => {
           console.log(`[Roast] Emitting roast for ${payload.speaker} in ${roomId}`)
           io.to(roomId).emit('roast', payload)
