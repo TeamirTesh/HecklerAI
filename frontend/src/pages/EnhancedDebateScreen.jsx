@@ -34,6 +34,7 @@ export default function EnhancedDebateScreen() {
   const [interimText, setInterimText] = useState('')
   const [otherInterimText, setOtherInterimText] = useState({ speaker: null, text: '' })
   const [currentRoast, setCurrentRoast] = useState(null)
+  const [isPaused, setIsPaused] = useState(false)
 
   const openingPlayedRef = useRef(false)
   const debateStatusRef = useRef(debateStatus)
@@ -224,6 +225,19 @@ export default function EnhancedDebateScreen() {
       stopMic()
     } else {
       startMic()
+    }
+  }
+
+  // Pause / resume the entire debate (mic + AI analysis)
+  function handlePauseResume() {
+    if (isPaused) {
+      startMic()
+      setIsPaused(false)
+      setInterimText('')
+    } else {
+      stopMic()
+      setIsPaused(true)
+      setInterimText('')
     }
   }
 
@@ -532,10 +546,20 @@ export default function EnhancedDebateScreen() {
                 <p className="text-red-400 text-sm">Mic error: {micError}</p>
               )}
 
-              {/* Pause option */}
-              <button className="bg-gray-800 hover:bg-gray-700 text-gray-300 px-6 py-3 rounded-xl transition-colors">
-                ⏸️ Pause Analysis
-              </button>
+              {/* Pause / Resume */}
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={handlePauseResume}
+                className={`${
+                  isPaused
+                    ? 'bg-yellow-600 hover:bg-yellow-500 text-white'
+                    : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
+                } px-6 py-3 rounded-xl transition-colors font-bold flex items-center space-x-2`}
+              >
+                <span>{isPaused ? '▶️' : '⏸️'}</span>
+                <span>{isPaused ? 'Resume' : 'Pause'}</span>
+              </motion.button>
 
               {/* End debate (host only) */}
               {isHost && (
