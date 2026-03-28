@@ -44,6 +44,10 @@ export default function DebateScreen() {
   const debateStatusRef = useRef(debateStatus)
   debateStatusRef.current = debateStatus
 
+  // Ref so handleChunk always reads current debateStatus without recreating
+  const debateStatusRef = useRef(debateStatus)
+  useEffect(() => { debateStatusRef.current = debateStatus }, [debateStatus])
+
   // ── Socket handlers ──────────────────────────────────────────────────────────
   const { emit } = useSocket({
     peer_joined: ({ speakerName }) => {
@@ -116,6 +120,7 @@ export default function DebateScreen() {
 
   // ── Audio: HTTP POST (base64 JSON). Socket.IO binary kept decoding as WebM/wrong bytes.
   const handleChunk = useCallback(
+<<<<<<< HEAD
     ({ chunk, mimeType }) => {
       if (debateStatusRef.current !== 'active') return
       const b64 = arrayBufferToBase64(chunk)
@@ -138,6 +143,13 @@ export default function DebateScreen() {
         .catch((e) => console.error('[Audio] transcription upload failed (network)', e))
     },
     [roomId, myName]
+=======
+    (base64Chunk) => {
+      if (debateStatusRef.current !== 'active') return
+      emit('audio_chunk', { roomId, speakerName: myName, chunk: base64Chunk })
+    },
+    [emit, roomId, myName] // debateStatusRef is a ref — no need in deps
+>>>>>>> origin/main
   )
 
   const { start: startMic, stop: stopMic, isRecording, error: micError } = useAudio(handleChunk)

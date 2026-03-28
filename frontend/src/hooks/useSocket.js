@@ -12,6 +12,7 @@ function getSocket() {
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
+      extraHeaders: { 'ngrok-skip-browser-warning': 'true' },
     })
   }
   return sharedSocket

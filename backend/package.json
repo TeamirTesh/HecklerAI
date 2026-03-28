@@ -9,6 +9,11 @@
     "dev": "nodemon src/index.js"
   },
   "dependencies": {
+<<<<<<< HEAD
+=======
+    "@deepgram/sdk": "^3.9.0",
+    "assemblyai": "^4.29.0",
+>>>>>>> origin/main
     "axios": "^1.7.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",

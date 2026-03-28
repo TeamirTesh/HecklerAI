@@ -4,7 +4,7 @@ import axios from 'axios'
 // "en" voices: try "bf0a246a-8642-498a-9950-80c35e9276b5" (strong male)
 // or "a0e99841-438c-4a64-b679-ae501e7d6091" (angry female)
 // Fallback to a known working voice if these don't exist in your account
-const VOICE_ID = process.env.CARTESIA_VOICE_ID || 'bf0a246a-8642-498a-9950-80c35e9276b5'
+const VOICE_ID = process.env.CARTESIA_VOICE_ID || '3d5ce2fb-e56c-42f0-9ed9-4662484063b4'
 const CARTESIA_VERSION = '2024-06-10'
 
 /**
@@ -87,7 +87,7 @@ export async function buildRoastAudio(stopPhrase, roastText) {
  */
 export async function generateOpeningAnnouncement() {
   const text =
-    "ALRIGHT LADIES AND GENTLEMEN WELCOME TO DEBATEROAST — THE ONLY DEBATE WHERE BULLSHIT GETS CALLED OUT IN REAL TIME. I don't care who you are, I don't care what side you're on — you say something stupid, I am ON YOUR ASS immediately. Topic is set. Debaters are ready. I want a clean fight. LET'S GO."
+    "ALRIGHT LADIES AND GENTLEMEN WELCOME TO DEBATEROAST — THE ONLY DEBATE WHERE BULLSHIT GETS CALLED OUT IN REAL TIME. I don't give a fuck who you are, I don't give a fuck what side you're on — you say something stupid, I am ON THAT ASS like white on rice. Topic is set. Debaters are ready. I want a clean fight. LET'S FUCKING DO THIS."
 
   return generateSpeech(text, { speed: 0.5 })
 }

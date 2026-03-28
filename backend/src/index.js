@@ -11,7 +11,11 @@ import {
   getRoasts,
   normalizeRoomId,
 } from './roomManager.js'
+<<<<<<< HEAD
 import { transcribeWhisperToText } from './whisperTranscription.js'
+=======
+import { createDeepgramStream } from './transcription.js'
+>>>>>>> origin/main
 import { processUtterance } from './analysisQueue.js'
 import { generateOpeningAnnouncement } from './cartesia.js'
 

@@ -1,5 +1,6 @@
 import { useRef, useCallback, useState } from 'react'
 
+<<<<<<< HEAD
 const SEGMENT_MS = 2800
 const MIME_WAV = 'audio/wav'
 /** Skip uploads shorter than ~50ms of audio (noise / empty flushes). */
@@ -58,6 +59,21 @@ function encodeWavPcm(float32Mono, sampleRate) {
  * @returns {{ start, stop, isRecording, error }}
  */
 export function useAudio(onChunk) {
+=======
+const SAMPLE_RATE = 16000
+
+/**
+ * Hook for capturing 16kHz mono PCM audio and streaming it via a callback.
+ * Uses AudioContext + AudioWorkletNode (PCMProcessor) to produce raw Int16 PCM
+ * required by AssemblyAI real-time transcription.
+ *
+ * @param {function} onChunk - called with base64-encoded Int16 PCM chunk
+ * @returns {{ start, stop, isRecording, error }}
+ */
+export function useAudio(onChunk) {
+  const audioContextRef = useRef(null)
+  const workletNodeRef = useRef(null)
+>>>>>>> origin/main
   const streamRef = useRef(null)
   const audioContextRef = useRef(null)
   const sourceRef = useRef(null)
@@ -101,11 +117,16 @@ export function useAudio(onChunk) {
           echoCancellation: true,
           noiseSuppression: true,
           channelCount: 1,
+<<<<<<< HEAD
+=======
+          sampleRate: SAMPLE_RATE,
+>>>>>>> origin/main
         },
         video: false,
       })
       streamRef.current = stream
 
+<<<<<<< HEAD
       const ctx = new AudioContext()
       await ctx.resume()
       sampleRateRef.current = ctx.sampleRate
@@ -134,6 +155,26 @@ export function useAudio(onChunk) {
 
       recordingRef.current = true
       segmentIntervalRef.current = setInterval(flushSegment, SEGMENT_MS)
+=======
+      const audioContext = new AudioContext({ sampleRate: SAMPLE_RATE })
+      audioContextRef.current = audioContext
+
+      await audioContext.audioWorklet.addModule('/pcm-processor.js')
+
+      const source = audioContext.createMediaStreamSource(stream)
+      const workletNode = new AudioWorkletNode(audioContext, 'pcm-processor')
+      workletNodeRef.current = workletNode
+
+      workletNode.port.onmessage = (e) => {
+        const bytes = new Uint8Array(e.data)
+        let binary = ''
+        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i])
+        onChunk(btoa(binary))
+      }
+
+      source.connect(workletNode)
+      workletNode.connect(audioContext.destination)
+>>>>>>> origin/main
 
       setIsRecording(true)
       setError(null)
@@ -146,6 +187,7 @@ export function useAudio(onChunk) {
   }, [flushSegment])
 
   const stop = useCallback(() => {
+<<<<<<< HEAD
     recordingRef.current = false
     if (segmentIntervalRef.current) {
       clearInterval(segmentIntervalRef.current)
@@ -172,6 +214,14 @@ export function useAudio(onChunk) {
     }
     if (ctx) {
       ctx.close()
+=======
+    if (workletNodeRef.current) {
+      workletNodeRef.current.disconnect()
+      workletNodeRef.current = null
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close()
+>>>>>>> origin/main
       audioContextRef.current = null
     }
     if (streamRef.current) {
