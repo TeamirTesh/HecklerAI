@@ -106,14 +106,24 @@ export default function EnhancedDebateScreen() {
       setRoom(updatedRoom)
       setDebateStatus('active')
       setDebateTimer(0)
-      // Play opening immediately via Web Speech — Cartesia may override via opening_audio
+      // Wait up to 4s for Cartesia audio — fall back to Web Speech if it doesn't arrive
       if (!openingPlayedRef.current) {
-        openingPlayedRef.current = true
-        playOpeningAnnouncement(null)
+        openingPlayedRef.current = 'pending'
+        openingPlayedRef.fallbackTimer = setTimeout(() => {
+          if (openingPlayedRef.current === 'pending') {
+            openingPlayedRef.current = true
+            playOpeningAnnouncement(null)
+          }
+        }, 4000)
       }
     },
     opening_audio: async ({ audioBase64 }) => {
-      // Cartesia audio arrived — already spoken via Web Speech, skip to avoid double
+      // Cartesia audio arrived — cancel the Web Speech fallback and play the real voice
+      if (openingPlayedRef.current === 'pending') {
+        clearTimeout(openingPlayedRef.fallbackTimer)
+        openingPlayedRef.current = true
+        await playOpeningAnnouncement(audioBase64)
+      }
     },
     transcript: (entry) => {
       setTranscript((prev) => [...prev.slice(-50), entry])
