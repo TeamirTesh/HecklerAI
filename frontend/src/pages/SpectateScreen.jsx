@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSocket } from '../hooks/useSocket.js'
-import { playBase64Audio } from '../hooks/useAudio.js'
+import { playOpeningAnnouncement, playRoastAudio } from '../hooks/useAudio.js'
 import RoastCard from '../components/RoastCard.jsx'
 
 export default function SpectateScreen() {
@@ -51,12 +51,13 @@ export default function SpectateScreen() {
       setRoom(updatedRoom)
       setDebateStatus('active')
       setDebateTimer(0)
+      if (!openingPlayedRef.current) {
+        openingPlayedRef.current = true
+        playOpeningAnnouncement(null)
+      }
     },
     opening_audio: async ({ audioBase64 }) => {
-      if (audioBase64 && !openingPlayedRef.current) {
-        openingPlayedRef.current = true
-        await playBase64Audio(audioBase64)
-      }
+      // Cartesia audio arrived — already spoken via Web Speech, skip
     },
     transcript: (entry) => {
       setTranscript((prev) => [...prev.slice(-200), entry])
@@ -78,7 +79,7 @@ export default function SpectateScreen() {
         text: `🔥 ${payload.speaker}: ${payload.fallacyName || payload.type}`,
         timestamp: Date.now(),
       }])
-      if (payload.audioBase64) await playBase64Audio(payload.audioBase64)
+      await playRoastAudio(payload.audioBase64, payload.stopPhrase, payload.roast)
     },
     debate_ended: () => setDebateStatus('ended'),
     interim_transcript: ({ speaker, text }) => {

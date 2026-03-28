@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSocket } from '../hooks/useSocket.js'
-import { playBase64Audio } from '../hooks/useAudio.js'
+import { playOpeningAnnouncement, playRoastAudio } from '../hooks/useAudio.js'
 import { useTranscription } from '../hooks/useTranscription.js'
 import RoastCard from '../components/RoastCard.jsx'
 
@@ -106,12 +106,14 @@ export default function EnhancedDebateScreen() {
       setRoom(updatedRoom)
       setDebateStatus('active')
       setDebateTimer(0)
+      // Play opening immediately via Web Speech — Cartesia may override via opening_audio
+      if (!openingPlayedRef.current) {
+        openingPlayedRef.current = true
+        playOpeningAnnouncement(null)
+      }
     },
     opening_audio: async ({ audioBase64 }) => {
-      if (audioBase64 && !openingPlayedRef.current) {
-        openingPlayedRef.current = true
-        await playBase64Audio(audioBase64)
-      }
+      // Cartesia audio arrived — already spoken via Web Speech, skip to avoid double
     },
     transcript: (entry) => {
       setTranscript((prev) => [...prev.slice(-50), entry])
@@ -156,10 +158,7 @@ export default function EnhancedDebateScreen() {
         },
       ])
 
-      // Play audio
-      if (payload.audioBase64) {
-        await playBase64Audio(payload.audioBase64)
-      }
+      await playRoastAudio(payload.audioBase64, payload.stopPhrase, payload.roast)
     },
     debate_ended: () => {
       setDebateStatus('ended')

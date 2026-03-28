@@ -90,3 +90,61 @@ export async function playBase64Audio(base64) {
     console.error('[Audio] Playback error:', err)
   }
 }
+
+/**
+ * Speak text using the browser's built-in Web Speech Synthesis.
+ * Used as fallback when Cartesia TTS is unavailable.
+ * @param {string} text
+ * @param {object} [opts]
+ * @param {number} [opts.rate]  - speaking rate (default 1.1)
+ * @param {number} [opts.pitch] - pitch (default 0.85, lower = deeper)
+ */
+export function speakText(text, { rate = 1.1, pitch = 0.85 } = {}) {
+  if (!window.speechSynthesis || !text) return
+  window.speechSynthesis.cancel()
+  const utterance = new SpeechSynthesisUtterance(text)
+  utterance.rate = rate
+  utterance.pitch = pitch
+  utterance.volume = 1
+
+  // Pick a deep male voice if available
+  const voices = window.speechSynthesis.getVoices()
+  const preferred = voices.find(v =>
+    /daniel|alex|fred|ralph|bruce|albert/i.test(v.name)
+  ) || voices.find(v => v.lang === 'en-US' && /male/i.test(v.name))
+  if (preferred) utterance.voice = preferred
+
+  window.speechSynthesis.speak(utterance)
+}
+
+const OPENING_TEXT =
+  "ALRIGHT LADIES AND GENTLEMEN, WELCOME TO DEBATE ROAST — THE ONLY DEBATE WHERE BAD ARGUMENTS GET CALLED OUT IN REAL TIME. I don't care who you are, I don't care what side you're on — you say something stupid, I am ON YOUR CASE immediately. Topic is set. Debaters are ready. Let's go."
+
+/**
+ * Play the opening announcement — uses Cartesia audio if provided,
+ * otherwise falls back to Web Speech Synthesis.
+ * @param {string|null} audioBase64
+ */
+export async function playOpeningAnnouncement(audioBase64) {
+  if (audioBase64) {
+    await playBase64Audio(audioBase64)
+  } else {
+    speakText(OPENING_TEXT, { rate: 1.05, pitch: 0.8 })
+  }
+}
+
+/**
+ * Play roast audio — uses Cartesia audio if provided,
+ * otherwise speaks the stop phrase + roast text via Web Speech Synthesis.
+ * @param {string|null} audioBase64
+ * @param {string} stopPhrase
+ * @param {string} roastText
+ */
+export async function playRoastAudio(audioBase64, stopPhrase, roastText) {
+  if (audioBase64) {
+    await playBase64Audio(audioBase64)
+  } else {
+    const text = [stopPhrase, roastText].filter(Boolean).join('. ')
+    speakText(text, { rate: 1.15, pitch: 0.8 })
+  }
+}
