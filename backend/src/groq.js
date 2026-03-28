@@ -1,32 +1,64 @@
 import OpenAI from 'openai'
 
-// Cerebras — faster than Groq, generous free tier, same Llama 3.3 70B
-let aiClient = null
+// Always use Groq — proven to work. Cerebras had 404 issues with model endpoint.
+let groqClient = null
+let cerebrasClient = null
 
-function getGroq() {
-  if (!aiClient) {
-    const cerebrasKey = process.env.CEREBRAS_API_KEY
-    const groqKey = process.env.GROQ_API_KEY
-    const apiKey = cerebrasKey || groqKey
-
-    if (!apiKey) {
-      console.error('[AI] CRITICAL: No API key found. Set CEREBRAS_API_KEY or GROQ_API_KEY in Railway env vars.')
-      return null
-    }
-
-    const baseURL = cerebrasKey
-      ? 'https://api.cerebras.ai/v1'
-      : 'https://api.groq.com/openai/v1'
-
-    console.log(`[AI] Using ${cerebrasKey ? 'Cerebras' : 'Groq'} — baseURL: ${baseURL}`)
-
-    aiClient = new OpenAI({ apiKey, baseURL })
+function getGroqClient() {
+  if (!groqClient) {
+    const key = process.env.GROQ_API_KEY
+    if (!key) return null
+    groqClient = new OpenAI({ apiKey: key, baseURL: 'https://api.groq.com/openai/v1' })
   }
-  return aiClient
+  return groqClient
 }
 
-function getModel() {
-  return process.env.CEREBRAS_API_KEY ? 'llama-3.3-70b' : 'llama-3.3-70b-versatile'
+function getCerebrasClient() {
+  if (!cerebrasClient) {
+    const key = process.env.CEREBRAS_API_KEY
+    if (!key) return null
+    cerebrasClient = new OpenAI({ apiKey: key, baseURL: 'https://api.cerebras.ai/v1' })
+  }
+  return cerebrasClient
+}
+
+// Try Cerebras first (faster, no daily limit), fall back to Groq
+async function callAI(messages, { maxTokens = 400, temperature = 0.9, jsonMode = true } = {}) {
+  const responseFormat = jsonMode ? { response_format: { type: 'json_object' } } : {}
+
+  // Try Cerebras first
+  const cerebras = getCerebrasClient()
+  if (cerebras) {
+    try {
+      const res = await cerebras.chat.completions.create({
+        model: 'llama-3.3-70b',
+        messages,
+        temperature,
+        max_tokens: maxTokens,
+        ...responseFormat,
+      })
+      console.log('[AI] Cerebras success')
+      return res.choices[0]?.message?.content
+    } catch (err) {
+      console.warn(`[AI] Cerebras failed (${err.status || err.message}), falling back to Groq`)
+    }
+  }
+
+  // Fall back to Groq
+  const groq = getGroqClient()
+  if (!groq) {
+    console.error('[AI] CRITICAL: No working API client. Set GROQ_API_KEY or CEREBRAS_API_KEY.')
+    return null
+  }
+  const res = await groq.chat.completions.create({
+    model: 'llama-3.3-70b-versatile',
+    messages,
+    temperature,
+    max_tokens: maxTokens,
+    ...responseFormat,
+  })
+  console.log('[AI] Groq success')
+  return res.choices[0]?.message?.content
 }
 
 const SYSTEM_PROMPTS = {
@@ -104,17 +136,9 @@ const getSystemPrompt = (roastLevel) => SYSTEM_PROMPTS[roastLevel] || SYSTEM_PRO
  * Analyze a new utterance — classify AND generate roast/compliment in one call.
  */
 export async function analyzeUtterance({ topic, debaters, exchanges, speaker, utterance, roastLevel = 'savage' }) {
-  const groq = getGroq()
-  if (!groq) {
-    console.error('[AI] Cannot analyze — no API client (missing API key)')
-    return { interrupt: false, reaction_type: 'NONE', type: 'CLEAN' }
-  }
+  console.log(`[AI] Analyzing utterance by ${speaker} (level: ${roastLevel}): "${utterance.slice(0, 80)}"`)
 
-  console.log(`[AI] Analyzing utterance by ${speaker} (level: ${roastLevel}): "${utterance.slice(0, 80)}..."`)
-
-  const contextLines = exchanges
-    .map((e) => `${e.speaker}: "${e.text}"`)
-    .join('\n')
+  const contextLines = exchanges.map((e) => `${e.speaker}: "${e.text}"`).join('\n')
 
   const userContent = `DEBATE TOPIC: ${topic}
 DEBATERS: ${debaters.join(' vs. ')}
@@ -128,20 +152,16 @@ LATEST UTTERANCE by ${speaker}:
 Analyze this utterance. Respond ONLY with the JSON object.`
 
   try {
-    const completion = await groq.chat.completions.create({
-      model: getModel(),
-      messages: [
+    const raw = await callAI(
+      [
         { role: 'system', content: getSystemPrompt(roastLevel) },
         { role: 'user', content: userContent },
       ],
-      temperature: 0.9,
-      max_tokens: 400,
-      response_format: { type: 'json_object' },
-    })
+      { maxTokens: 400, temperature: 0.9, jsonMode: true }
+    )
 
-    const raw = completion.choices[0]?.message?.content
     if (!raw) {
-      console.warn('[AI] Empty response from AI')
+      console.warn('[AI] Empty response')
       return { interrupt: false, reaction_type: 'NONE', type: 'CLEAN' }
     }
 
@@ -158,20 +178,14 @@ Analyze this utterance. Respond ONLY with the JSON object.`
  * Analyze the full debate transcript and generate real analytics for the summary screen.
  */
 export async function generateDebateAnalytics({ topic, debaters, transcript, roasts, scores, fallacyTypes }) {
-  const groq = getGroq()
-
-  const transcriptText = transcript
-    .map((e) => `${e.speaker}: "${e.text}"`)
-    .join('\n') || '(no transcript recorded)'
-
+  const transcriptText = transcript.map((e) => `${e.speaker}: "${e.text}"`).join('\n') || '(no transcript recorded)'
   const roastSummary = roasts.length > 0
     ? roasts.map((r) => `- ${r.speaker}: ${r.fallacyName || r.type}`).join('\n')
     : '(none)'
 
   try {
-    const completion = await groq.chat.completions.create({
-      model: getModel(),
-      messages: [
+    const raw = await callAI(
+      [
         {
           role: 'system',
           content: `You are an expert debate analyst. Analyze the debate transcript and return ONLY a JSON object in this exact format:
@@ -207,45 +221,36 @@ ${roastSummary}
 ROAST COUNTS (more roasts = worse): ${debaters.map((d) => `${d}: ${scores[d] || 0}`).join(', ')}`,
         },
       ],
-      temperature: 0.3,
-      max_tokens: 1500,
-      response_format: { type: 'json_object' },
-    })
-
-    const raw = completion.choices[0]?.message?.content
+      { maxTokens: 1500, temperature: 0.3, jsonMode: true }
+    )
     return JSON.parse(raw)
   } catch (err) {
-    console.error('[Groq] Analytics error:', err.message)
+    console.error('[AI] Analytics error:', err.message)
     return null
   }
 }
 
 /**
  * Rewrite the roast message to call out the specific wrong claim using real facts.
- * Called only for FACTUAL_CLAIM after Tavily returns.
  */
 export async function augmentMessageWithFacts(message, claim, factText) {
-  const groq = getGroq()
   try {
-    const completion = await groq.chat.completions.create({
-      model: getModel(),
-      messages: [
+    const raw = await callAI(
+      [
         {
           role: 'system',
-          content:
-            'You are DebateRoast. Rewrite the roast to specifically call out the wrong claim with the real verified fact. Same savage, vulgar, profane tone. MAX 3 SENTENCES. Return ONLY the roast text — no JSON, no labels.',
+          content: 'You are DebateRoast. Rewrite the roast to specifically call out the wrong claim with the real verified fact. Same savage, vulgar, profane tone. MAX 3 SENTENCES. Return ONLY the roast text — no JSON, no labels.',
         },
         {
           role: 'user',
           content: `Original roast: "${message}"\n\nWrong claim: "${claim}"\n\nReal fact: "${factText}"\n\nRewrite with the real fact.`,
         },
       ],
-      temperature: 0.9,
-      max_tokens: 200,
-    })
-    return completion.choices[0]?.message?.content?.trim() || message
+      { maxTokens: 200, temperature: 0.9, jsonMode: false }
+    )
+    return raw?.trim() || message
   } catch (err) {
-    console.error('[Groq] Message augmentation error:', err.message)
+    console.error('[AI] Augmentation error:', err.message)
     return message
   }
 }

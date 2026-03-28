@@ -276,7 +276,8 @@ httpServer.listen(PORT, () => {
   console.log(`[Server] DebateRoast backend running on port ${PORT}`)
   const hasCerebras = !!process.env.CEREBRAS_API_KEY
   const hasGroq = !!process.env.GROQ_API_KEY
-  if (hasCerebras) console.log('[Server] AI provider: Cerebras ✓')
+  if (hasCerebras && hasGroq) console.log('[Server] AI provider: Cerebras (primary) + Groq (fallback) ✓')
+  else if (hasCerebras) console.log('[Server] AI provider: Cerebras ✓ (no Groq fallback)')
   else if (hasGroq) console.log('[Server] AI provider: Groq ✓')
   else console.error('[Server] ⚠️  NO AI KEY SET — roasts will not fire! Set CEREBRAS_API_KEY or GROQ_API_KEY in Railway env vars.')
 })
