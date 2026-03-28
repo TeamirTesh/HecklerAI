@@ -1,90 +1,81 @@
-import { toFile } from 'groq-sdk'
-import { getGroq } from './groq.js'
-
 const MODEL = 'whisper-large-v3'
-/** How often to send accumulated audio to Whisper (Groq has no streaming STT). */
-const FLUSH_INTERVAL_MS = 2800
-/** Skip tiny buffers during live flushes to avoid junk API calls. */
-const MIN_PERIODIC_BYTES = 2000
-/** On session end, transcribe any remaining audio with speech. */
-const MIN_FINAL_BYTES = 400
+const GROQ_TRANSCRIBE_URL =
+  (process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1').replace(/\/$/, '') +
+  '/audio/transcriptions'
+
+/** Ignore near-empty uploads. */
+const MIN_SEGMENT_BYTES = 256
+
+function isRiffWave(buf) {
+  return (
+    buf.length >= 12 &&
+    buf.toString('ascii', 0, 4) === 'RIFF' &&
+    buf.toString('ascii', 8, 12) === 'WAVE'
+  )
+}
+
+function isWebmEbml(buf) {
+  return buf.length >= 4 && buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3
+}
+
+function fileMeta(mimeType, buf) {
+  if (buf && isRiffWave(buf)) return { name: 'audio.wav', type: 'audio/wav' }
+  if (buf && isWebmEbml(buf)) return { name: 'audio.webm', type: 'audio/webm' }
+  const m = (mimeType || '').toLowerCase()
+  if (m.includes('wav')) return { name: 'audio.wav', type: 'audio/wav' }
+  if (m.includes('webm')) return { name: 'audio.webm', type: 'audio/webm' }
+  if (m.includes('ogg')) return { name: 'audio.ogg', type: mimeType || 'audio/ogg' }
+  return { name: 'audio.wav', type: 'audio/wav' }
+}
+
+let lastGroqMediaErrorLog = 0
+
+async function transcribeBuffer(buf, filename, contentType) {
+  const key = process.env.GROQ_API_KEY
+  if (!key) throw new Error('GROQ_API_KEY is not set')
+
+  const form = new FormData()
+  const blob = new Blob([buf], { type: contentType })
+  form.append('file', blob, filename)
+  form.append('model', MODEL)
+  form.append('language', 'en')
+
+  const res = await fetch(GROQ_TRANSCRIBE_URL, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}` },
+    body: form,
+  })
+
+  const raw = await res.text()
+  if (!res.ok) {
+    throw new Error(`${res.status} ${raw}`)
+  }
+  return JSON.parse(raw)
+}
 
 /**
- * Buffered live transcription: collects WebM/opus chunks from the browser and
- * periodically calls Groq Whisper. Same outward shape as the old streaming STT
- * (finalize → callback).
- *
- * @param {object} opts
- * @param {string} opts.speakerName
- * @param {function} opts.onFinal - async (speakerName, transcript)
- * @param {function} [opts.onError] - (err) => void
- * @returns {{ send: (buf: Buffer) => void, close: () => Promise<void> }}
+ * Transcribe one audio segment (WAV preferred). Used by HTTP upload path.
+ * @returns {Promise<string>} trimmed text or empty string
  */
-export function createWhisperLiveSession({ speakerName, onFinal, onError }) {
-  const buffers = []
-  let pendingBytes = 0
-  let flushTimer = null
-  let closed = false
-  let chain = Promise.resolve()
-
-  async function transcribe(audio, { isFinal = false } = {}) {
-    const minBytes = isFinal ? MIN_FINAL_BYTES : MIN_PERIODIC_BYTES
-    if (!audio.length || audio.length < minBytes) return
-
-    try {
-      const groq = getGroq()
-      const file = await toFile(audio, 'audio.webm', { type: 'audio/webm' })
-      const { text } = await groq.audio.transcriptions.create({
-        file,
-        model: MODEL,
-        language: 'en',
-      })
-      const transcript = text?.trim()
-      if (transcript) {
-        console.log(`[Whisper] ${speakerName}: "${transcript}"`)
-        await onFinal(speakerName, transcript)
+export async function transcribeWhisperToText(buf, mimeType) {
+  if (!buf?.length || buf.length < MIN_SEGMENT_BYTES) return ''
+  const { name, type } = fileMeta(mimeType, buf)
+  try {
+    const data = await transcribeBuffer(buf, name, type)
+    return data?.text?.trim() || ''
+  } catch (err) {
+    const msg = err?.message || String(err)
+    const now = Date.now()
+    if (msg.includes('valid media file') || msg.includes('invalid_request')) {
+      if (now - lastGroqMediaErrorLog > 15000) {
+        lastGroqMediaErrorLog = now
+        console.error(
+          `[Whisper] Groq rejected audio. First bytes: ${buf.subarray(0, 16).toString('hex')} len=${buf.length} ${msg.slice(0, 120)}`
+        )
       }
-    } catch (err) {
-      console.error(`[Whisper] Error for ${speakerName}:`, err.message || err)
-      onError?.(err)
+    } else {
+      console.error('[Whisper] Transcription error:', msg.slice(0, 200))
     }
-  }
-
-  function drainToTranscribe(isFinal) {
-    if (pendingBytes === 0 || buffers.length === 0) return
-    const minBytes = isFinal ? MIN_FINAL_BYTES : MIN_PERIODIC_BYTES
-    if (pendingBytes < minBytes) return
-
-    const combined = Buffer.concat(buffers)
-    buffers.length = 0
-    pendingBytes = 0
-    chain = chain.then(() => transcribe(combined, { isFinal }))
-  }
-
-  function startFlushTimer() {
-    if (flushTimer || closed) return
-    flushTimer = setInterval(() => {
-      if (closed) return
-      drainToTranscribe(false)
-    }, FLUSH_INTERVAL_MS)
-  }
-
-  return {
-    send(audioChunk) {
-      if (closed) return
-      buffers.push(audioChunk)
-      pendingBytes += audioChunk.length
-      startFlushTimer()
-    },
-
-    async close() {
-      closed = true
-      if (flushTimer) {
-        clearInterval(flushTimer)
-        flushTimer = null
-      }
-      drainToTranscribe(true)
-      await chain
-    },
+    return ''
   }
 }

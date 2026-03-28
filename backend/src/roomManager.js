@@ -24,6 +24,12 @@ const ROOM_TTL = 60 * 60 * 4 // 4 hours
 
 const MAX_EXCHANGES = 5
 
+/** Redis keys use uppercase IDs from createRoom; URLs may be mixed case. */
+export function normalizeRoomId(roomId) {
+  if (roomId == null) return ''
+  return String(roomId).trim().toUpperCase()
+}
+
 export async function createRoom({ roomId, topic, debater1, debater2 }) {
   const r = getRedis()
   const room = {

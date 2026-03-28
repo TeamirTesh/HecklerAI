@@ -10,7 +10,7 @@ Real-time AI debate referee. Two debaters. One unhinged AI that interrupts with 
 |-------|------|
 | Frontend | React + Vite + Tailwind CSS + Framer Motion + Socket.io client |
 | Backend | Node.js + Express + Socket.io + Redis |
-| Transcription | Groq Whisper (`whisper-large-v3`, buffered WebM chunks) |
+| Transcription | Groq Whisper (`whisper-large-v3`, ~2.8s WAV/PCM segments from the browser) |
 | Roast AI | Groq LLaMA 3.3 70B |
 | Fact-checking | Perplexity API (sonar-small-online) |
 | TTS | Cartesia Sonic |
@@ -120,10 +120,9 @@ npm run dev
 ## How It Works
 
 ```
-Browser Mic (getUserMedia)
-    ↓ base64 audio chunks via Socket.io
+Browser Mic → AudioContext (mono PCM) → WAV segment every ~2.8s via Socket.io
 Backend (Node.js)
-    ↓ binary WebM chunks (buffered ~2.8s windows)
+    ↓ one Whisper request per segment
 Groq Whisper transcription
     ↓ transcript text per window
 Analysis Pipeline

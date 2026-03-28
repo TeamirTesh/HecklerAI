@@ -44,16 +44,9 @@ export function useSocket(handlers = {}) {
     }
   }, [socket])
 
-  const emit = useCallback(
-    (event, data, ack) => {
-      if (ack) {
-        socket.emit(event, data, ack)
-      } else {
-        socket.emit(event, data)
-      }
-    },
-    [socket]
-  )
+  const emit = useCallback((event, ...args) => {
+    socket.emit(event, ...args)
+  }, [socket])
 
   return { socket, emit }
 }

@@ -8,8 +8,21 @@ import ScoreTracker from '../components/ScoreTracker.jsx'
 import TranscriptFeed from '../components/TranscriptFeed.jsx'
 import DebaterPanel from '../components/DebaterPanel.jsx'
 
+const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001'
+
+function arrayBufferToBase64(ab) {
+  const u8 = new Uint8Array(ab)
+  let binary = ''
+  const step = 8192
+  for (let i = 0; i < u8.length; i += step) {
+    binary += String.fromCharCode.apply(null, u8.subarray(i, i + step))
+  }
+  return btoa(binary)
+}
+
 export default function DebateScreen() {
-  const { roomId } = useParams()
+  const { roomId: roomIdParam } = useParams()
+  const roomId = String(roomIdParam ?? '').trim().toUpperCase()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
 
@@ -97,23 +110,42 @@ export default function DebateScreen() {
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Audio chunk handler ──────────────────────────────────────────────────────
+  // ── Audio: HTTP POST (base64 JSON). Socket.IO binary kept decoding as WebM/wrong bytes.
   const handleChunk = useCallback(
-    (base64Chunk) => {
+    ({ chunk, mimeType }) => {
       if (debateStatus !== 'active') return
-      emit('audio_chunk', { roomId, speakerName: myName, chunk: base64Chunk })
+      const b64 = arrayBufferToBase64(chunk)
+      void fetch(`${API_BASE}/api/transcription-chunk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomId,
+          speakerName: myName,
+          mimeType,
+          chunk: b64,
+        }),
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            const body = await res.text()
+            console.error('[Audio] transcription-chunk HTTP', res.status, body.slice(0, 300))
+          }
+        })
+        .catch((e) => console.error('[Audio] transcription upload failed (network)', e))
     },
-    [emit, roomId, myName, debateStatus]
+    [roomId, myName, debateStatus]
   )
 
   const { start: startMic, stop: stopMic, isRecording, error: micError } = useAudio(handleChunk)
 
   // ── Start debate (host only) ─────────────────────────────────────────────────
-  async function handleStartDebate() {
+  function handleStartDebate() {
     emit('start_debate', { roomId }, (res) => {
       if (res?.error) console.error('Start error:', res.error)
     })
-    await startMic()
+    // Do not startMic() here: debateStatus is still "waiting" until `debate_started`
+    // arrives, and handleChunk drops chunks when not active. Mic starts in the
+    // effect below once status is active (same as the other debater).
   }
 
   // ── Toggle mic (non-host) ────────────────────────────────────────────────────
@@ -133,11 +165,14 @@ export default function DebateScreen() {
     })
   }
 
-  // Start mic automatically when debate becomes active (for non-hosts)
+  // Start mic when the debate is active (host + guest). Host must not start earlier
+  // or audio is captured while handleChunk still rejects chunks (status not active).
+  // Cleanup stops the mic + interval on unmount (React Strict Mode) or when debate ends,
+  // so we never leave orphan timers sending half-baked buffers to Groq.
   useEffect(() => {
-    if (debateStatus === 'active' && !isRecording && !isHost) {
-      startMic()
-    }
+    if (debateStatus !== 'active') return
+    startMic()
+    return () => stopMic()
   }, [debateStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (

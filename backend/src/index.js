@@ -9,23 +9,23 @@ import {
   getRoom,
   updateRoomStatus,
   getRoasts,
-  deleteRoom,
+  normalizeRoomId,
 } from './roomManager.js'
-import { createWhisperLiveSession } from './whisperTranscription.js'
+import { transcribeWhisperToText } from './whisperTranscription.js'
 import { processUtterance } from './analysisQueue.js'
 import { generateOpeningAnnouncement } from './cartesia.js'
 
 const PORT = process.env.PORT || 3001
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173'
 
 const app = express()
-app.use(cors({ origin: FRONTEND_URL, credentials: true }))
-app.use(express.json())
+// Echo request Origin so dev works on localhost vs 127.0.0.1 and odd Vite ports (a single fixed allowlist was blocking fetch before the request hit the server).
+app.use(cors({ origin: true, credentials: true }))
+app.use(express.json({ limit: '12mb' }))
 
 const httpServer = createServer(app)
 const io = new Server(httpServer, {
-  cors: { origin: FRONTEND_URL, methods: ['GET', 'POST'], credentials: true },
-  maxHttpBufferSize: 1e7, // 10MB for audio chunks
+  cors: { origin: true, methods: ['GET', 'POST'], credentials: true },
+  maxHttpBufferSize: 1e7,
 })
 
 // ── REST: create a new room ────────────────────────────────────────────────────
@@ -41,29 +41,86 @@ app.post('/api/rooms', async (req, res) => {
 
 // ── REST: get room state ───────────────────────────────────────────────────────
 app.get('/api/rooms/:roomId', async (req, res) => {
-  const room = await getRoom(req.params.roomId)
+  const room = await getRoom(normalizeRoomId(req.params.roomId))
   if (!room) return res.status(404).json({ error: 'Room not found' })
   res.json(room)
 })
 
 // ── REST: get post-debate summary ──────────────────────────────────────────────
 app.get('/api/rooms/:roomId/summary', async (req, res) => {
-  const room = await getRoom(req.params.roomId)
+  const rid = normalizeRoomId(req.params.roomId)
+  const room = await getRoom(rid)
   if (!room) return res.status(404).json({ error: 'Room not found' })
-  const roasts = await getRoasts(req.params.roomId)
+  const roasts = await getRoasts(rid)
   res.json({ room, roasts })
 })
 
-// ── In-memory: active Whisper transcription sessions per socket ─────────────
-// Map<socketId, { session, roomId, speakerName }>
-const activeTranscriptionSessions = new Map()
+/**
+ * Mic audio upload (WAV base64). Socket.IO nested binary was unreliable (wrong WebM/float bytes).
+ */
+app.post('/api/transcription-chunk', async (req, res) => {
+  try {
+    const { roomId: rawRoomId, speakerName, chunk: b64, mimeType } = req.body || {}
+    const roomId = normalizeRoomId(rawRoomId)
+    if (!roomId || !speakerName || typeof b64 !== 'string') {
+      console.warn('[API] transcription-chunk 400: missing fields', {
+        hasRoom: !!rawRoomId,
+        hasSpeaker: !!speakerName,
+        chunkType: typeof b64,
+      })
+      return res.status(400).json({ error: 'roomId, speakerName, and chunk (base64) are required' })
+    }
+    const buf = Buffer.from(b64, 'base64')
+    if (buf.length < 64) {
+      console.warn('[API] transcription-chunk 400: chunk too small', roomId, buf.length)
+      return res.status(400).json({ error: 'chunk too small' })
+    }
 
-// ── Socket.io ─────────────────────────────────────────────────────────────────
+    const headHex = buf.subarray(0, 4).toString('hex')
+    console.log(
+      `[API] transcription-chunk room=${roomId} speaker=${speakerName} bytes=${buf.length} head=${headHex}`
+    )
+
+    const room = await getRoom(roomId)
+    if (!room || room.status !== 'active') {
+      console.warn('[API] transcription-chunk 400: room not active', roomId, room?.status ?? 'missing')
+      return res.status(400).json({ error: 'Room not active' })
+    }
+
+    const transcript = await transcribeWhisperToText(buf, mimeType)
+    if (!transcript) {
+      console.log(`[API] transcription-chunk empty transcript room=${roomId}`)
+    }
+    if (transcript) {
+      io.to(roomId).emit('transcript', {
+        speaker: speakerName,
+        text: transcript,
+        timestamp: Date.now(),
+      })
+      await processUtterance({
+        roomId,
+        speaker: speakerName,
+        utterance: transcript,
+        onRoast: async (payload) => {
+          console.log(`[Roast] Emitting roast for ${payload.speaker} in ${roomId}`)
+          io.to(roomId).emit('roast', payload)
+        },
+      })
+    }
+
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[API] transcription-chunk:', err.message || err)
+    res.status(500).json({ error: 'transcription failed' })
+  }
+})
+
+// ── Socket.io (signalling only — audio uses POST /api/transcription-chunk) ────
 io.on('connection', (socket) => {
   console.log(`[Socket] Connected: ${socket.id}`)
 
-  // Debater joins a room
-  socket.on('join_room', async ({ roomId, speakerName }, ack) => {
+  socket.on('join_room', async ({ roomId: rawRoomId, speakerName }, ack) => {
+    const roomId = normalizeRoomId(rawRoomId)
     const room = await getRoom(roomId)
     if (!room) {
       ack?.({ error: 'Room not found' })
@@ -78,8 +135,8 @@ io.on('connection', (socket) => {
     ack?.({ ok: true, room })
   })
 
-  // Start debate — emit opening announcement
-  socket.on('start_debate', async ({ roomId }, ack) => {
+  socket.on('start_debate', async ({ roomId: rawRoomId }, ack) => {
+    const roomId = normalizeRoomId(rawRoomId)
     const room = await updateRoomStatus(roomId, 'active')
     if (!room) {
       ack?.({ error: 'Room not found' })
@@ -88,7 +145,6 @@ io.on('connection', (socket) => {
 
     console.log(`[Socket] Starting debate in room ${roomId}`)
 
-    // Generate opening announcement
     const audioBuffer = await generateOpeningAnnouncement()
     io.to(roomId).emit('debate_started', {
       room,
@@ -97,62 +153,15 @@ io.on('connection', (socket) => {
     ack?.({ ok: true })
   })
 
-  // Audio chunk from a debater's mic
-  socket.on('audio_chunk', async ({ roomId, speakerName, chunk }) => {
-    const streamKey = socket.id
-
-    if (!activeTranscriptionSessions.has(streamKey)) {
-      console.log(`[Whisper] Starting transcription session for ${speakerName} in ${roomId}`)
-
-      const session = createWhisperLiveSession({
-        speakerName,
-        onFinal: async (speaker, transcript) => {
-          io.to(roomId).emit('transcript', {
-            speaker,
-            text: transcript,
-            timestamp: Date.now(),
-          })
-
-          await processUtterance({
-            roomId,
-            speaker,
-            utterance: transcript,
-            onRoast: async (payload) => {
-              console.log(`[Roast] Emitting roast for ${payload.speaker} in ${roomId}`)
-              io.to(roomId).emit('roast', payload)
-            },
-          })
-        },
-        onError: (err) => {
-          console.error(`[Whisper] Session error for ${speakerName}:`, err)
-        },
-      })
-
-      activeTranscriptionSessions.set(streamKey, { session, roomId, speakerName })
-    }
-
-    const { session } = activeTranscriptionSessions.get(streamKey)
-    const buffer = Buffer.from(chunk, 'base64')
-    session.send(buffer)
-  })
-
-  // End debate
-  socket.on('end_debate', async ({ roomId }, ack) => {
+  socket.on('end_debate', async ({ roomId: rawRoomId }, ack) => {
+    const roomId = normalizeRoomId(rawRoomId)
     await updateRoomStatus(roomId, 'ended')
     io.to(roomId).emit('debate_ended', { roomId })
     ack?.({ ok: true })
   })
 
-  // Cleanup on disconnect
   socket.on('disconnect', () => {
     console.log(`[Socket] Disconnected: ${socket.id}`)
-    const sessionData = activeTranscriptionSessions.get(socket.id)
-    if (sessionData) {
-      activeTranscriptionSessions.delete(socket.id)
-      sessionData.session.close().catch((err) => {
-        console.error('[Whisper] Error closing session on disconnect:', err)
-      })
-    }
     if (socket.data.speakerName && socket.data.roomId) {
       socket.to(socket.data.roomId).emit('peer_left', {
         speakerName: socket.data.speakerName,
@@ -161,7 +170,6 @@ io.on('connection', (socket) => {
   })
 })
 
-// ── Healthcheck ────────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ ok: true, ts: Date.now() }))
 
 httpServer.listen(PORT, () => {
