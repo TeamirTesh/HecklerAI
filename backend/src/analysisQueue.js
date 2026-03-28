@@ -6,29 +6,35 @@ import {
   recordFallacyType,
   recordRoast,
 } from './roomManager.js'
-import { analyzeUtterance } from './groq.js'
+import { analyzeUtterance, augmentMessageWithFacts } from './groq.js'
 import { factCheck } from './tavily.js'
-import { buildRoastAudio } from './cartesia.js'
+import { buildRoastAudio, generateSpeech } from './cartesia.js'
 
 /**
  * Process a finalized utterance through the full analysis pipeline.
  *
- * @param {object} opts
+ * Latency strategy:
+ *   FALLACY / GOOD_POINT  → single Groq call, stop+message TTS in parallel, emit. (~1–1.5s)
+ *   FACTUAL_CLAIM         → stop phrase TTS and Tavily fire simultaneously.
+ *                           Tavily returns while stop phrase audio is being delivered.
+ *                           Message is augmented with real facts, then message TTS fires. (~2–3s)
+ *   CLEAN                 → discarded immediately, no further work.
+ *
+ * @param {object}   opts
  * @param {string}   opts.roomId
- * @param {string}   opts.speaker     - debater name
- * @param {string}   opts.utterance   - finalized transcript text
- * @param {function} opts.onRoast     - async (roastPayload) callback to emit to clients
+ * @param {string}   opts.speaker    - debater name
+ * @param {string}   opts.utterance  - finalized transcript text
+ * @param {function} opts.onRoast    - async (payload) => void — emits to clients
  */
 export async function processUtterance({ roomId, speaker, utterance, onRoast }) {
   const room = await getRoom(roomId)
   if (!room || room.status !== 'active') return
 
-  // Save to rolling context
+  // Save to rolling context (capped to last 5 in roomManager)
   await pushExchange(roomId, speaker, utterance)
-
   const exchanges = await getExchanges(roomId)
 
-  // Step 1: Groq analysis
+  // Single Groq call — classification + roast/compliment generation in one shot
   const analysis = await analyzeUtterance({
     topic: room.topic,
     debaters: room.debaters,
@@ -39,59 +45,71 @@ export async function processUtterance({ roomId, speaker, utterance, onRoast }) 
 
   if (!analysis.interrupt) return
 
-  let roastText = analysis.roast
+  let messageText = analysis.message
   let factSource = null
   let factVerdict = null
+  let audioBuffer = null
 
-  // Step 2: Fact-check if needed
   if (analysis.type === 'FACTUAL_CLAIM' && analysis.claim) {
-    console.log(`[Analysis] Fact-checking: "${analysis.claim}"`)
-    const factResult = await factCheck(analysis.claim, roastText)
-    roastText = factResult.augmentedRoast
+    // PARALLEL TRICK: fire stop phrase TTS and Tavily simultaneously.
+    // Stop phrase audio is ready by the time Tavily returns, so both are
+    // assembled into one payload with zero extra wait.
+    console.log(`[Analysis] Parallel: stop phrase TTS + Tavily for "${analysis.claim}"`)
+    const [stopAudio, factResult] = await Promise.all([
+      generateSpeech(analysis.stop_phrase, { speed: 1 }),
+      factCheck(analysis.claim),
+    ])
+
     factSource = factResult.source
     factVerdict = factResult.verdict
 
-    // Only roast if the claim is actually wrong
-    if (factVerdict === 'TRUE') {
-      console.log('[Analysis] Claim verified as true — skipping roast')
-      return
+    if (factVerdict === 'UNVERIFIABLE') {
+      // No facts found — roast with the original message, no source shown
+      factVerdict = null
     }
+
+    // Augment the roast message with the real fact before generating its audio
+    if (factResult.factText) {
+      messageText = await augmentMessageWithFacts(analysis.message, analysis.claim, factResult.factText)
+    }
+
+    const messageAudio = await generateSpeech(messageText, { speed: 0 })
+
+    const parts = []
+    if (stopAudio) parts.push(stopAudio)
+    if (messageAudio) parts.push(messageAudio)
+    audioBuffer = parts.length ? Buffer.concat(parts) : null
+  } else {
+    // FALLACY or GOOD_POINT — stop phrase and message TTS already run in parallel inside buildRoastAudio
+    audioBuffer = await buildRoastAudio(analysis.stop_phrase, messageText)
   }
 
-  // Step 3: Generate TTS audio
-  console.log(`[Analysis] Generating roast audio for ${speaker}`)
-  const audioBuffer = await buildRoastAudio(analysis.stop_phrase, roastText)
-
-  // Step 4: Update scores
   const scores = await incrementScore(roomId, speaker)
 
-  // Step 5: Record fallacy type
   if (analysis.fallacy_name) {
     await recordFallacyType(roomId, speaker, analysis.fallacy_name)
   }
 
-  // Step 6: Record roast for summary
   const roastRecord = {
     roomId,
     speaker,
     utterance,
+    reactionType: analysis.reaction_type,
     stopPhrase: analysis.stop_phrase,
-    roast: roastText,
+    roast: messageText,
     type: analysis.type,
     fallacyName: analysis.fallacy_name || null,
     claim: analysis.claim || null,
+    pointSummary: analysis.point_summary || null,
     factVerdict,
     factSource,
     timestamp: Date.now(),
   }
   await recordRoast(roomId, roastRecord)
 
-  // Step 7: Emit to clients
-  const payload = {
+  await onRoast({
     ...roastRecord,
     scores,
     audioBase64: audioBuffer ? audioBuffer.toString('base64') : null,
-  }
-
-  await onRoast(payload)
+  })
 }
