@@ -145,12 +145,24 @@ io.on('connection', (socket) => {
 
     console.log(`[Socket] Starting debate in room ${roomId}`)
 
-    const audioBuffer = await generateOpeningAnnouncement()
+    // Emit immediately so clients set debate active and start mic POSTs; do not block on Cartesia.
     io.to(roomId).emit('debate_started', {
       room,
-      openingAudioBase64: audioBuffer ? audioBuffer.toString('base64') : null,
+      openingAudioBase64: null,
     })
     ack?.({ ok: true })
+
+    generateOpeningAnnouncement()
+      .then((audioBuffer) => {
+        if (audioBuffer) {
+          io.to(roomId).emit('opening_audio', {
+            openingAudioBase64: audioBuffer.toString('base64'),
+          })
+        }
+      })
+      .catch((err) => {
+        console.error('[Socket] Opening announcement failed:', err.message || err)
+      })
   })
 
   socket.on('end_debate', async ({ roomId: rawRoomId }, ack) => {

@@ -41,6 +41,8 @@ export default function DebateScreen() {
 
   // Track if we've played the opening
   const openingPlayedRef = useRef(false)
+  const debateStatusRef = useRef(debateStatus)
+  debateStatusRef.current = debateStatus
 
   // ── Socket handlers ──────────────────────────────────────────────────────────
   const { emit } = useSocket({
@@ -58,9 +60,11 @@ export default function DebateScreen() {
         return next
       })
     },
-    debate_started: async ({ room: updatedRoom, openingAudioBase64 }) => {
+    debate_started: ({ room: updatedRoom }) => {
       setRoom(updatedRoom)
       setDebateStatus('active')
+    },
+    opening_audio: async ({ openingAudioBase64 }) => {
       if (openingAudioBase64 && !openingPlayedRef.current) {
         openingPlayedRef.current = true
         await playBase64Audio(openingAudioBase64)
@@ -113,7 +117,7 @@ export default function DebateScreen() {
   // ── Audio: HTTP POST (base64 JSON). Socket.IO binary kept decoding as WebM/wrong bytes.
   const handleChunk = useCallback(
     ({ chunk, mimeType }) => {
-      if (debateStatus !== 'active') return
+      if (debateStatusRef.current !== 'active') return
       const b64 = arrayBufferToBase64(chunk)
       void fetch(`${API_BASE}/api/transcription-chunk`, {
         method: 'POST',
@@ -133,7 +137,7 @@ export default function DebateScreen() {
         })
         .catch((e) => console.error('[Audio] transcription upload failed (network)', e))
     },
-    [roomId, myName, debateStatus]
+    [roomId, myName]
   )
 
   const { start: startMic, stop: stopMic, isRecording, error: micError } = useAudio(handleChunk)
