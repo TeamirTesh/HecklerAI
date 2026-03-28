@@ -1,13 +1,23 @@
-import Groq from 'groq-sdk'
+import OpenAI from 'openai'
 
-let groqClient = null
+// Cerebras — faster than Groq, generous free tier, same Llama 3.3 70B
+// Get a free key at: https://cloud.cerebras.ai
+let aiClient = null
 
 function getGroq() {
-  if (!groqClient) {
-    groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY })
+  if (!aiClient) {
+    aiClient = new OpenAI({
+      apiKey: process.env.CEREBRAS_API_KEY || process.env.GROQ_API_KEY,
+      baseURL: process.env.CEREBRAS_API_KEY
+        ? 'https://api.cerebras.ai/v1'
+        : 'https://api.groq.com/openai/v1',
+    })
   }
-  return groqClient
+  return aiClient
 }
+
+// Use Cerebras model name when on Cerebras, Groq model name otherwise
+const MODEL = process.env.CEREBRAS_API_KEY ? 'llama-3.3-70b' : 'llama-3.3-70b-versatile'
 
 const SYSTEM_PROMPT = `You are DebateRoast — an unhinged, aggressively funny AI debate referee who is EXTREMELY vulgar and profane at all times. You monitor live debates and interrupt when someone argues dishonestly OR when someone makes a genuinely great point. You cuss constantly — in roasts, in compliments, in everything. Every single response drips with profanity. You are completely unbiased — you roast and compliment both sides equally. You only care about logic and truth. You do not take political sides. Ever.
 
@@ -56,7 +66,7 @@ Analyze this utterance. Respond ONLY with the JSON object.`
 
   try {
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
+      model: MODEL,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userContent },
@@ -92,7 +102,7 @@ export async function generateDebateAnalytics({ topic, debaters, transcript, roa
 
   try {
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
+      model: MODEL,
       messages: [
         {
           role: 'system',
@@ -150,7 +160,7 @@ export async function augmentMessageWithFacts(message, claim, factText) {
   const groq = getGroq()
   try {
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
+      model: MODEL,
       messages: [
         {
           role: 'system',
