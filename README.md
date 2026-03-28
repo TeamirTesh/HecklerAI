@@ -1,4 +1,4 @@
-# DebateRoast 🔥
+# HecklerAI 🔥
 
 Real-time AI debate referee. Two debaters. One unhinged AI that interrupts with vulgar, comedic callouts the moment it detects a logical fallacy or false factual claim.
 
