@@ -5,6 +5,7 @@ import RoastLevelScreen from './pages/RoastLevelScreen.jsx'
 import EnhancedDebateScreen from './pages/EnhancedDebateScreen.jsx'
 import EnhancedSummaryScreen from './pages/EnhancedSummaryScreen.jsx'
 import SpectateScreen from './pages/SpectateScreen.jsx'
+import PostDebateReport from './pages/PostDebateReport.jsx'
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
       <Route path="/debate/:roomId" element={<EnhancedDebateScreen />} />
       <Route path="/summary/:roomId" element={<EnhancedSummaryScreen />} />
       <Route path="/spectate/:roomId" element={<SpectateScreen />} />
+      <Route path="/report/:roomId" element={<PostDebateReport />} />
     </Routes>
   )
 }

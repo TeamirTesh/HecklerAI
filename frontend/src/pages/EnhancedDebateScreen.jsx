@@ -207,7 +207,7 @@ export default function EnhancedDebateScreen() {
   function handleEndDebate() {
     stopMic()
     emit('end_debate', { roomId }, () => {
-      navigate(`/summary/${roomId}?d1=${encodeURIComponent(d1)}&d2=${encodeURIComponent(d2)}`)
+      navigate(`/report/${roomId}`)
     })
   }
 
@@ -496,7 +496,7 @@ export default function EnhancedDebateScreen() {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.97 }}
               onClick={() =>
-                navigate(`/summary/${roomId}?d1=${encodeURIComponent(d1)}&d2=${encodeURIComponent(d2)}`)
+                navigate(`/report/${roomId}`)
               }
               className="bg-red-600 hover:bg-red-500 text-white font-bold text-xl px-12 py-4 rounded-xl shadow-lg"
             >
