@@ -26,7 +26,7 @@ export function useAudio(onChunk) {
       })
       streamRef.current = stream
 
-      // Prefer webm/opus — Deepgram handles it well
+      // Prefer webm/opus — matches browser defaults and Groq Whisper upload format
       const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
         ? 'audio/webm;codecs=opus'
         : MediaRecorder.isTypeSupported('audio/webm')

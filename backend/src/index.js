@@ -11,7 +11,7 @@ import {
   getRoasts,
   deleteRoom,
 } from './roomManager.js'
-import { createDeepgramStream } from './deepgram.js'
+import { createWhisperLiveSession } from './whisperTranscription.js'
 import { processUtterance } from './analysisQueue.js'
 import { generateOpeningAnnouncement } from './cartesia.js'
 
@@ -54,9 +54,9 @@ app.get('/api/rooms/:roomId/summary', async (req, res) => {
   res.json({ room, roasts })
 })
 
-// ── In-memory: active Deepgram streams per socket ─────────────────────────────
-// Map<socketId, { stream, roomId, speakerName }>
-const activeStreams = new Map()
+// ── In-memory: active Whisper transcription sessions per socket ─────────────
+// Map<socketId, { session, roomId, speakerName }>
+const activeTranscriptionSessions = new Map()
 
 // ── Socket.io ─────────────────────────────────────────────────────────────────
 io.on('connection', (socket) => {
@@ -101,21 +101,18 @@ io.on('connection', (socket) => {
   socket.on('audio_chunk', async ({ roomId, speakerName, chunk }) => {
     const streamKey = socket.id
 
-    // Create Deepgram stream if it doesn't exist for this socket
-    if (!activeStreams.has(streamKey)) {
-      console.log(`[Deepgram] Creating stream for ${speakerName} in ${roomId}`)
+    if (!activeTranscriptionSessions.has(streamKey)) {
+      console.log(`[Whisper] Starting transcription session for ${speakerName} in ${roomId}`)
 
-      const stream = createDeepgramStream({
+      const session = createWhisperLiveSession({
         speakerName,
         onFinal: async (speaker, transcript) => {
-          // Broadcast transcript to everyone in the room
           io.to(roomId).emit('transcript', {
             speaker,
             text: transcript,
             timestamp: Date.now(),
           })
 
-          // Run analysis pipeline
           await processUtterance({
             roomId,
             speaker,
@@ -127,17 +124,16 @@ io.on('connection', (socket) => {
           })
         },
         onError: (err) => {
-          console.error(`[Deepgram] Stream error for ${speakerName}:`, err)
+          console.error(`[Whisper] Session error for ${speakerName}:`, err)
         },
       })
 
-      activeStreams.set(streamKey, { stream, roomId, speakerName })
+      activeTranscriptionSessions.set(streamKey, { session, roomId, speakerName })
     }
 
-    const { stream } = activeStreams.get(streamKey)
-    // chunk comes as base64 string from the browser
+    const { session } = activeTranscriptionSessions.get(streamKey)
     const buffer = Buffer.from(chunk, 'base64')
-    stream.send(buffer)
+    session.send(buffer)
   })
 
   // End debate
@@ -150,10 +146,12 @@ io.on('connection', (socket) => {
   // Cleanup on disconnect
   socket.on('disconnect', () => {
     console.log(`[Socket] Disconnected: ${socket.id}`)
-    const streamData = activeStreams.get(socket.id)
-    if (streamData) {
-      streamData.stream.close()
-      activeStreams.delete(socket.id)
+    const sessionData = activeTranscriptionSessions.get(socket.id)
+    if (sessionData) {
+      activeTranscriptionSessions.delete(socket.id)
+      sessionData.session.close().catch((err) => {
+        console.error('[Whisper] Error closing session on disconnect:', err)
+      })
     }
     if (socket.data.speakerName && socket.data.roomId) {
       socket.to(socket.data.roomId).emit('peer_left', {

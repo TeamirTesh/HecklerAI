@@ -2,7 +2,8 @@ import Groq from 'groq-sdk'
 
 let groqClient = null
 
-function getGroq() {
+/** Shared Groq client for Whisper STT and debate analysis. */
+export function getGroq() {
   if (!groqClient) {
     groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY })
   }

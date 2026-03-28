@@ -10,7 +10,7 @@ Real-time AI debate referee. Two debaters. One unhinged AI that interrupts with 
 |-------|------|
 | Frontend | React + Vite + Tailwind CSS + Framer Motion + Socket.io client |
 | Backend | Node.js + Express + Socket.io + Redis |
-| Transcription | Deepgram (nova-2, real-time streaming) |
+| Transcription | Groq Whisper (`whisper-large-v3`, buffered WebM chunks) |
 | Roast AI | Groq LLaMA 3.3 70B |
 | Fact-checking | Perplexity API (sonar-small-online) |
 | TTS | Cartesia Sonic |
@@ -25,7 +25,7 @@ DebateRoast/
 │   ├── src/
 │   │   ├── index.js          # Express + Socket.io server
 │   │   ├── roomManager.js    # Redis room/score/exchange management
-│   │   ├── deepgram.js       # Live transcription streams
+│   │   ├── whisperTranscription.js  # Groq Whisper (buffered live STT)
 │   │   ├── groq.js           # LLaMA 3 analysis + roast generation
 │   │   ├── perplexity.js     # Fact-checking
 │   │   ├── cartesia.js       # TTS audio generation
@@ -93,8 +93,7 @@ npm run dev
 
 | Key | Where to get it |
 |-----|-----------------|
-| `DEEPGRAM_API_KEY` | https://console.deepgram.com |
-| `GROQ_API_KEY` | https://console.groq.com |
+| `GROQ_API_KEY` | https://console.groq.com (Whisper STT + LLM analysis) |
 | `CARTESIA_API_KEY` | https://play.cartesia.ai |
 | `PERPLEXITY_API_KEY` | https://www.perplexity.ai/settings/api |
 | `REDIS_URL` | Local: `redis://localhost:6379` / Railway Redis addon |
@@ -124,9 +123,9 @@ npm run dev
 Browser Mic (getUserMedia)
     ↓ base64 audio chunks via Socket.io
 Backend (Node.js)
-    ↓ binary chunks
-Deepgram Live Transcription
-    ↓ is_final transcript
+    ↓ binary WebM chunks (buffered ~2.8s windows)
+Groq Whisper transcription
+    ↓ transcript text per window
 Analysis Pipeline
     ├── Groq LLaMA 3.3 70B → detect fallacy / factual claim
     ├── (if FACTUAL_CLAIM) Perplexity → verify + get source
@@ -143,7 +142,6 @@ Both Browser Clients
 
 ### Backend (`backend/.env`)
 ```
-DEEPGRAM_API_KEY=
 GROQ_API_KEY=
 CARTESIA_API_KEY=
 PERPLEXITY_API_KEY=
