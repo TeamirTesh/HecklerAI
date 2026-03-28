@@ -104,21 +104,22 @@ io.on('connection', (socket) => {
   })
 
   // Start debate — emit opening announcement
-  socket.on('start_debate', async ({ roomId }, ack) => {
+  socket.on('start_debate', async ({ roomId, roastLevel }, ack) => {
     const room = await updateRoomStatus(roomId, 'active')
     if (!room) {
       ack?.({ error: 'Room not found' })
       return
     }
 
-    console.log(`[Socket] Starting debate in room ${roomId}`)
+    const level = roastLevel || 'savage'
+    console.log(`[Socket] Starting debate in room ${roomId} (level: ${level})`)
 
     // Emit debate_started IMMEDIATELY so the mic and debateStatus activate without delay
     io.to(roomId).emit('debate_started', { room, openingAudioBase64: null })
     ack?.({ ok: true })
 
     // Generate opening audio in background — send when ready (non-blocking)
-    generateOpeningAnnouncement().then((audioBuffer) => {
+    generateOpeningAnnouncement(level).then((audioBuffer) => {
       if (audioBuffer) {
         io.to(roomId).emit('opening_audio', { audioBase64: audioBuffer.toString('base64') })
       }

@@ -127,19 +127,26 @@ export function speakText(text, { rate = 1.25, pitch = 0.5 } = {}) {
   }
 }
 
-const OPENING_TEXT =
-  "ALRIGHT LADIES AND GENTLEMEN, WELCOME TO DEBATEROAST — THE ONLY DEBATE WHERE BULLSHIT GETS CALLED OUT IN REAL TIME. I don't give a fuck who you are, I don't give a fuck what side you're on — you say something stupid, I am ON THAT ASS like white on rice. Topic is set. Debaters are ready. I want a clean fight. LET'S FUCKING DO THIS."
+const OPENING_TEXTS = {
+  easy: "Welcome everyone to DebateRoast. This is a space for respectful, thoughtful debate. I'll be listening carefully, and if I spot a logical error or a particularly strong argument, I'll let you know. Good luck to both of you.",
+  intermediate: "Alright, welcome to DebateRoast. I'll be watching both of you closely. If you make a bad argument, I will call it out. Make a good one, and I'll give credit. No excuses, no hand-holding. Let's debate.",
+  savage: "ALRIGHT LADIES AND GENTLEMEN, WELCOME TO DEBATEROAST — THE ONLY DEBATE WHERE BULLSHIT GETS CALLED OUT IN REAL TIME. I don't give a fuck who you are, I don't give a fuck what side you're on — you say something stupid, I am ON THAT ASS like white on rice. Topic is set. Debaters are ready. LET'S FUCKING DO THIS.",
+}
 
 /**
  * Play the opening announcement — uses Cartesia audio if provided,
  * otherwise falls back to Web Speech Synthesis.
  * @param {string|null} audioBase64
+ * @param {string} [roastLevel='savage']
  */
-export async function playOpeningAnnouncement(audioBase64) {
+export async function playOpeningAnnouncement(audioBase64, roastLevel = 'savage') {
   if (audioBase64) {
     await playBase64Audio(audioBase64)
   } else {
-    speakText(OPENING_TEXT, { rate: 1.05, pitch: 0.8 })
+    const text = OPENING_TEXTS[roastLevel] || OPENING_TEXTS.savage
+    const rate = roastLevel === 'easy' ? 0.95 : roastLevel === 'intermediate' ? 1.0 : 1.05
+    const pitch = roastLevel === 'easy' ? 1.1 : roastLevel === 'intermediate' ? 0.9 : 0.8
+    speakText(text, { rate, pitch })
   }
 }
 

@@ -113,7 +113,7 @@ export default function EnhancedDebateScreen() {
         openingPlayedRef.fallbackTimer = setTimeout(() => {
           if (openingPlayedRef.current === 'pending') {
             openingPlayedRef.current = true
-            playOpeningAnnouncement(null)
+            playOpeningAnnouncement(null, roastLevel)
           }
         }, 4000)
       }
@@ -123,7 +123,7 @@ export default function EnhancedDebateScreen() {
       if (openingPlayedRef.current === 'pending') {
         clearTimeout(openingPlayedRef.fallbackTimer)
         openingPlayedRef.current = true
-        await playOpeningAnnouncement(audioBase64)
+        await playOpeningAnnouncement(audioBase64, roastLevel)
       }
     },
     transcript: (entry) => {
@@ -213,7 +213,7 @@ export default function EnhancedDebateScreen() {
 
   // Start debate
   function handleStartDebate() {
-    emit('start_debate', { roomId }, (res) => {
+    emit('start_debate', { roomId, roastLevel }, (res) => {
       if (res?.error) console.error('Start error:', res.error)
     })
     startMic()

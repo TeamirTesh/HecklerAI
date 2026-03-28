@@ -82,12 +82,17 @@ export async function buildRoastAudio(stopPhrase, roastText) {
   return Buffer.concat(parts)
 }
 
+const OPENING_TEXTS = {
+  easy: "Welcome everyone to DebateRoast. This is a space for respectful, thoughtful debate. I'll be listening carefully, and if I spot a logical error or a particularly strong argument, I'll let you know. Let's keep it civil, educational, and constructive. Good luck to both of you.",
+  intermediate: "Alright, welcome to DebateRoast. I'll be watching both of you closely. If you make a bad argument, I will call it out — no sugar-coating. Make a good one, and I'll give credit where it's due. No excuses, no hand-holding. Let's debate.",
+  savage: "ALRIGHT LADIES AND GENTLEMEN WELCOME TO DEBATEROAST — THE ONLY DEBATE WHERE BULLSHIT GETS CALLED OUT IN REAL TIME. I don't give a fuck who you are, I don't give a fuck what side you're on — you say something stupid, I am ON THAT ASS like white on rice. Topic is set. Debaters are ready. I want a clean fight. LET'S FUCKING DO THIS.",
+}
+
 /**
  * Generate the opening announcement audio.
+ * @param {string} [roastLevel='savage']
  */
-export async function generateOpeningAnnouncement() {
-  const text =
-    "ALRIGHT LADIES AND GENTLEMEN WELCOME TO DEBATEROAST — THE ONLY DEBATE WHERE BULLSHIT GETS CALLED OUT IN REAL TIME. I don't give a fuck who you are, I don't give a fuck what side you're on — you say something stupid, I am ON THAT ASS like white on rice. Topic is set. Debaters are ready. I want a clean fight. LET'S FUCKING DO THIS."
-
+export async function generateOpeningAnnouncement(roastLevel = 'savage') {
+  const text = OPENING_TEXTS[roastLevel] || OPENING_TEXTS.savage
   return generateSpeech(text, { speed: 0.5 })
 }
