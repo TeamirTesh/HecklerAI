@@ -4,13 +4,13 @@ Two debaters. One unhinged AI that interrupts in real time when someone says som
 
 ---
 
-## Overview
+## 📋 Overview
 
 DebateRoast is a real-time AI debate referee. Two people join a room, pick a roast intensity level, and debate a topic. As they speak, the system transcribes their audio, analyzes every sentence for logical fallacies, verifiable false claims, and manipulation tactics. When something is caught, the AI interrupts with a voiced roast delivered through the speakers of both participants. Strong arguments get vulgar compliments. Bad arguments get destroyed. A full post-debate report is generated at the end.
 
 ---
 
-## Stack
+## 🛠️ Stack
 
 | Layer | Technology | Purpose |
 |---|---|---|
@@ -27,7 +27,7 @@ DebateRoast is a real-time AI debate referee. Two people join a room, pick a roa
 
 ---
 
-## Architecture
+## 🏗️ Architecture
 
 ```
 Browser (Debater 1)                    Browser (Debater 2)
@@ -68,7 +68,7 @@ Browser (Debater 1)                    Browser (Debater 2)
 
 ---
 
-## File Structure
+## 📁 File Structure
 
 ```
 HecklerAI/
@@ -116,29 +116,29 @@ HecklerAI/
 
 ---
 
-## Local Setup
+## 💻 Local Setup
 
-### Prerequisites
+### ✅ Prerequisites
 
 - Node.js 18 or higher
 - Docker Desktop (for Redis)
 - ngrok account and CLI installed
 - API keys for: Groq, AssemblyAI, Cartesia, Tavily
 
-### 1. Clone the repo
+### 1. 📥 Clone the repo
 
 ```bash
 git clone https://github.com/your-org/HecklerAI.git
 cd HecklerAI
 ```
 
-### 2. Start Redis
+### 2. 🐳 Start Redis
 
 ```bash
 docker run -d -p 6379:6379 redis:alpine
 ```
 
-### 3. Configure backend environment
+### 3. ⚙️ Configure backend environment
 
 Create `backend/.env`:
 
@@ -152,7 +152,7 @@ FRONTEND_URL=*
 NODE_TLS_REJECT_UNAUTHORIZED=0
 ```
 
-### 4. Configure frontend environment
+### 4. ⚙️ Configure frontend environment
 
 Create `frontend/.env`:
 
@@ -162,14 +162,14 @@ VITE_BACKEND_URL=https://your-ngrok-url.ngrok-free.app
 
 This must point to the HTTPS ngrok URL for the backend. See step 6.
 
-### 5. Install dependencies
+### 5. 📦 Install dependencies
 
 ```bash
 cd backend && npm install
 cd ../frontend && npm install
 ```
 
-### 6. Start ngrok for the backend
+### 6. 🌐 Start ngrok for the backend
 
 ```bash
 ngrok http 3001
@@ -177,13 +177,13 @@ ngrok http 3001
 
 Copy the `https://xxxx.ngrok-free.app` URL into `frontend/.env` as `VITE_BACKEND_URL`, then proceed to step 8.
 
-### 7. Start the backend
+### 7. ▶️ Start the backend
 
 ```bash
 cd backend && npm start
 ```
 
-### 8. Build and serve the frontend
+### 8. 🏗️ Build and serve the frontend
 
 ```bash
 cd frontend && npm run build && npm run preview -- --host
@@ -191,7 +191,7 @@ cd frontend && npm run build && npm run preview -- --host
 
 The `--host` flag makes the frontend accessible on your local network IP (shown in terminal output). This is required for a second person to join from another device on the same network.
 
-### 9. Open the app
+### 9. 🌍 Open the app
 
 - Person 1 (host): open `https://localhost:4173` in browser
 - Person 2 (guest): open `https://YOUR_LOCAL_IP:4173` in browser
@@ -208,9 +208,9 @@ Share that HTTPS URL with Person 2 instead of the local IP.
 
 ---
 
-## Environment Variables
+## 🔧 Environment Variables
 
-### backend/.env
+### 📄 backend/.env
 
 | Variable | Required | Description |
 |---|---|---|
@@ -224,7 +224,7 @@ Share that HTTPS URL with Person 2 instead of the local IP.
 | `PORT` | No | Backend port. Default: `3001` |
 | `CARTESIA_VOICE_ID` | No | Override the default Cartesia voice |
 
-### frontend/.env
+### 📄 frontend/.env
 
 | Variable | Required | Description |
 |---|---|---|
@@ -232,7 +232,7 @@ Share that HTTPS URL with Person 2 instead of the local IP.
 
 ---
 
-## How a Session Works
+## 🎬 How a Session Works
 
 1. Person 1 opens the frontend, enters a debate topic and both debater names, clicks Start
 2. The app creates a room in Redis and navigates through the AI preparation screen and roast level selection
@@ -250,7 +250,7 @@ Spectators can join via the "Spectate a debate" form on the setup page using the
 
 ---
 
-## Roast Levels
+## 🔥 Roast Levels
 
 | Level | Behavior |
 |---|---|
@@ -260,7 +260,7 @@ Spectators can join via the "Spectate a debate" form on the setup page using the
 
 ---
 
-## Deployment
+## 🚀 Deployment
 
 **Backend — Railway:**
 - Connect the repo to Railway
@@ -279,7 +279,7 @@ Spectators can join via the "Spectate a debate" form on the setup page using the
 
 ---
 
-## API Keys
+## 🔑 API Keys
 
 | Service | Link |
 |---|---|
