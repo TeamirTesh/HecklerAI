@@ -1,4 +1,4 @@
-# DebateRoast
+# HecklerAI
 
 Two debaters. One unhinged AI that interrupts in real time when someone says something wrong, commits a logical fallacy, or makes an exceptionally strong point. No waiting until the end. No softening it. Called out live, in front of everyone, equally, regardless of who is speaking.
 
