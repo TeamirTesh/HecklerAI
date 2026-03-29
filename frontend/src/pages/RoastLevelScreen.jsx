@@ -12,7 +12,8 @@ const ROAST_LEVELS = [
     bgGradient: 'from-green-500/20 to-emerald-500/20',
     borderColor: 'border-green-500/50',
     textColor: 'text-green-400',
-    example: '"Consider providing evidence for that claim."',
+    ringColor: 'ring-green-500/30',
+    example: '"That reply does not engage their actual claim — you are answering a simpler version of their argument. Name their premise and show which step fails, or you are not rebutting them."',
     icon: '😊',
     features: ['Respectful tone', 'Educational focus', 'Constructive feedback']
   },
@@ -25,7 +26,8 @@ const ROAST_LEVELS = [
     bgGradient: 'from-yellow-500/20 to-orange-500/20',
     borderColor: 'border-yellow-500/50',
     textColor: 'text-yellow-400',
-    example: '"That\'s a bold claim with zero evidence backing it."',
+    ringColor: 'ring-yellow-500/30',
+    example: '"That is a weak move — you are not addressing what they actually said, you are mocking a cartoon version of it. That is a straw man, and you know it."',
     icon: '🔥',
     features: ['Direct language', 'Moderate sarcasm', 'Clear callouts']
   },
@@ -35,10 +37,11 @@ const ROAST_LEVELS = [
     description: 'Maximum Entertainment',
     subtitle: 'Aggressive, funny, brutal',
     color: 'red',
-    bgGradient: 'from-red-500/20 to-rose-500/20', 
+    bgGradient: 'from-red-500/20 to-rose-500/20',
     borderColor: 'border-red-500/50',
     textColor: 'text-red-400',
-    example: '"You just mansplained correlation into causation like a freshman stats dropout."',
+    ringColor: 'ring-red-500/30',
+    example: '"Shut the fuck up — you are not debating, you are lying about what they said so you can feel smart; that is a pathetic straw man and everyone here sees you dodging the real argument, you absolute clown."',
     icon: '💀',
     features: ['No mercy', 'Comedic brutality', 'Viral potential']
   }
@@ -104,7 +107,7 @@ export default function RoastLevelScreen() {
               onClick={() => handleLevelSelect(level)}
               className={`relative cursor-pointer rounded-2xl border-2 transition-all duration-300 transform hover:shadow-xl ${
                 selectedLevel?.id === level.id
-                  ? `${level.borderColor} bg-gradient-to-br ${level.bgGradient} shadow-lg ring-2 ring-${level.color}-500/30`
+                  ? `${level.borderColor} bg-gradient-to-br ${level.bgGradient} shadow-lg ring-2 ${level.ringColor}`
                   : 'border-gray-700 bg-gray-800/50 hover:border-gray-600'
               }`}
             >

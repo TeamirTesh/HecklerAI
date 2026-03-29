@@ -83,11 +83,16 @@ export async function buildRoastAudio(stopPhrase, roastText) {
 }
 
 /**
- * Generate the opening announcement audio.
+ * Generate the opening announcement audio, tuned to the roast mode.
+ * @param {string} [roastMode='intermediate'] - 'easy' | 'intermediate' | 'savage'
  */
-export async function generateOpeningAnnouncement() {
-  const text =
-    "ALRIGHT LADIES AND GENTLEMEN WELCOME TO DEBATEROAST — THE ONLY DEBATE WHERE BULLSHIT GETS CALLED OUT IN REAL TIME. I don't give a fuck who you are, I don't give a fuck what side you're on — you say something stupid, I am ON THAT ASS like white on rice. Topic is set. Debaters are ready. I want a clean fight. LET'S FUCKING DO THIS."
+export async function generateOpeningAnnouncement(roastMode = 'intermediate') {
+  const scripts = {
+    easy: "Welcome, everyone, to DebateRoast — where logic and evidence are the only things that matter. I am your AI referee. I do not take sides, I do not play favorites, and I do not let bad reasoning slide. If you make a claim, back it up. If your argument has a flaw, I will point it out — clearly and directly. The topic is set. The debaters are ready. Let's have a sharp, honest debate. Begin.",
+    intermediate: "Alright, welcome to DebateRoast — where weak arguments go to die. I'm your AI referee, and I don't care who you are or what side you're on. Make a shaky claim, I'm calling it out. Use a logical fallacy, I'm all over it. The topic is locked, the debaters are ready — let's see who actually knows what they're talking about. Let's go.",
+    savage: "ALRIGHT LADIES AND GENTLEMEN WELCOME TO DEBATE ROAST — THE ONLY DEBATE WHERE BULLSHIT GETS CALLED OUT IN REAL TIME. I don't give a fuck who you are, I don't give a fuck what side you're on — you say something stupid, I am ON THAT ASS like white on rice. Topic is set. Debaters are ready. I want a clean fight. LET'S FUCKING DO THIS.",
+  }
 
+  const text = scripts[roastMode] ?? scripts.intermediate
   return generateSpeech(text, { speed: 0.5 })
 }

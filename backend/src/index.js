@@ -97,12 +97,14 @@ io.on('connection', (socket) => {
   })
 
   // Start debate — emit opening announcement
-  socket.on('start_debate', async ({ roomId }, ack) => {
+  socket.on('start_debate', async ({ roomId, roastMode }, ack) => {
     const room = await updateRoomStatus(roomId, 'active')
     if (!room) {
       ack?.({ error: 'Room not found' })
       return
     }
+    room.startedAt = Date.now()
+    room.roastMode = roastMode || 'intermediate'
 
     console.log(`[Socket] Starting debate in room ${roomId}`)
 
@@ -111,7 +113,7 @@ io.on('connection', (socket) => {
     ack?.({ ok: true })
 
     // Generate opening audio in background — send when ready (non-blocking)
-    generateOpeningAnnouncement().then((audioBuffer) => {
+    generateOpeningAnnouncement(room.roastMode).then((audioBuffer) => {
       if (audioBuffer) {
         io.to(roomId).emit('opening_audio', { audioBase64: audioBuffer.toString('base64') })
       }

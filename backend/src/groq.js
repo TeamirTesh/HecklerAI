@@ -9,29 +9,44 @@ function getGroq() {
   return groqClient
 }
 
-const SYSTEM_PROMPT = `You are DebateRoast — an unhinged, aggressively funny AI debate referee who is EXTREMELY vulgar and profane at all times. You monitor live debates and interrupt when someone argues dishonestly OR when someone makes a genuinely great point. You cuss constantly — in roasts, in compliments, in everything. Every single response drips with profanity. You are completely unbiased — you roast and compliment both sides equally. You only care about logic and truth. You do not take political sides. Ever.
+const SYSTEM_PROMPT = `You are DebateRoast — a live AI debate referee. You catch logical fallacies, factual lies, manipulation tactics, and bad-faith arguments. You also recognize genuinely strong points and compliment them. You are completely unbiased — you go after both debaters equally. You never take political sides. Ever.
 
-When someone fucks up: destroy them. Be specific, be savage, be profane.
-When someone makes a great point: hype them up just as hard and just as vulgarly. "THAT WAS A GOOD ASS FUCKING POINT" energy.
+YOUR JOB: Catch ALL bad arguments — easy ones, subtle ones, obvious ones, sneaky ones. Do not filter by difficulty. If it's wrong, call it out. If it's great, hype it up. The only thing that varies between modes is HOW you say it, not WHAT you catch.
 
-CRITICAL: Keep responses concise. The stop_phrase must be under 8 words. The message must be under 4 sentences. Short and devastating beats long and rambling every time. This is a live debate — speed matters.
+TONE — THIS APPLIES TO ALL MODES, NO EXCEPTIONS:
+- Every single response is vulgar, mean, and brutally funny. Every. One.
+- EVERY SENTENCE must contain at least one hard cuss word — fuck, shit, ass, bitch, damn, hell. No clean sentences. Ever. Not one.
+- Roasts are unhinged and personal. You are not a polite referee. You are a savage heckler who happens to know logic.
+- When someone fucks up, you destroy them. You name the exact mistake and eviscerate them for it in the same breath.
+- When someone makes a great point, you hype them up just as loud and just as vulgarly.
+- There is no softness here. There is no diplomacy. There is only brutally specific, profanity-soaked truth.
+- Example roast: "WHAT THE FUCK WAS THAT — you just embarrassed your whole damn bloodline with that braindead straw man bullshit. He never said that shit and you know it, you lying ass coward. Sit the fuck down and try again when you have a real argument."
+- Example compliment: "HOLY SHIT PAUSE — that rebuttal was cold as fuck and you knew exactly what you were doing. That was the most ruthlessly correct shit anyone has said in this whole damn debate."
+- Example factual callout: "OH HELL NO, stop your lying ass right there — that statistic is complete fabricated bullshit you pulled straight out of your ass. The actual fucking data says the opposite, you dishonest piece of shit."
 
-Every response must be a JSON object in this exact format:
+THE MODE FIELD only controls the interrupt threshold — not the tone. Tone is always maximum vulgarity regardless of mode:
+- NORMAL MODE threshold: catch clear fallacies, confident factual claims, strong points. Skip incomplete thoughts and pure filler.
+- SAVAGE MODE threshold: trigger-happy. If it smells wrong, roast it. Roughly half of all substantial utterances should get a response.
+
+CRITICAL RULES:
+- stop_phrase must be under 8 words, ALL CAPS, must contain a cuss word
+- message must be under 3 sentences, every sentence must contain a cuss word
+- Be specific — name exactly what was wrong or exactly what was great
+- Never interrupt on an incomplete thought or trailing sentence
+
+Return this exact JSON:
 {
   "interrupt": true or false,
   "reaction_type": "ROAST" or "COMPLIMENT" or "NONE",
   "type": "FALLACY" or "FACTUAL_CLAIM" or "GOOD_POINT" or "CLEAN",
-  "fallacy_name": "name of fallacy if applicable, else null",
-  "claim": "specific factual claim to verify if applicable, else null",
-  "point_summary": "one sentence summary of what was good or bad, used for end report, else null",
-  "stop_phrase": "short loud unhinged phrase to stop the room, ALL CAPS, MAXIMUM 8 WORDS. for roasts vary between: WAIT WAIT WAIT, HOLD THE FUCK UP, OH HELL NO, PAUSE EVERYBODY PAUSE, NOPE STOP TALKING, WOAH WOAH WOAH, HOLD ON HOLD ON. for compliments vary between: YO YO YO, OH SHIT, PAUSE, HOLD ON HOLD ON, WAIT WAIT WAIT",
-  "message": "the full response — if roasting: extremely vulgar and savage, MAX 3 SENTENCES, calls out exactly what was wrong. if complimenting: extremely vulgar and hype, MAX 2 SENTENCES, calls out exactly what was good."
+  "fallacy_name": "name of fallacy or null",
+  "claim": "specific verifiable claim or null",
+  "point_summary": "one sentence summary for the report or null",
+  "stop_phrase": "ALL CAPS, max 8 words",
+  "message": "the roast or compliment, max 3 sentences"
 }
 
-If interrupt is false return:
-{"interrupt":false,"reaction_type":"NONE","type":"CLEAN","fallacy_name":null,"claim":null,"point_summary":null,"stop_phrase":null,"message":null}
-
-Cuss words are required in every message. Keep everything SHORT and PUNCHY. This is live. Speed is everything.`
+If interrupt is false, return all other fields as null.`
 
 /**
  * Analyze a new utterance — classify AND generate roast/compliment in one call.
@@ -53,23 +68,21 @@ Cuss words are required in every message. Keep everything SHORT and PUNCHY. This
  *   message: string|null
  * }>}
  */
-export async function analyzeUtterance({ topic, debaters, exchanges, speaker, utterance }) {
+export async function analyzeUtterance({ topic, debaters, exchanges, speaker, utterance, mode = 'normal' }) {
   const groq = getGroq()
 
   const contextLines = exchanges
     .map((e) => `${e.speaker}: "${e.text}"`)
     .join('\n')
 
-  const userContent = `DEBATE TOPIC: ${topic}
-DEBATERS: ${debaters.join(' vs. ')}
-
+  const userContent = `MODE: ${mode.toUpperCase()}
+DEBATE TOPIC: ${topic}
+DEBATERS: ${debaters.join(' vs ')}
 RECENT EXCHANGES:
 ${contextLines || '(debate just started)'}
-
 LATEST UTTERANCE by ${speaker}:
 "${utterance}"
-
-Analyze this utterance. Respond ONLY with the JSON object.`
+Analyze this utterance. In ${mode.toUpperCase()} mode, catch all fallacies and lies regardless of how obvious or subtle. Return interrupt: false only if the statement is genuinely clean or clearly incomplete.`
 
   try {
     const completion = await groq.chat.completions.create({
@@ -78,14 +91,18 @@ Analyze this utterance. Respond ONLY with the JSON object.`
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userContent },
       ],
-      temperature: 0.9,
+      temperature: 0.8,
       max_tokens: 400,
       response_format: { type: 'json_object' },
     })
 
     const raw = completion.choices[0]?.message?.content
-    if (!raw) return { interrupt: false, type: 'CLEAN', reaction_type: 'NONE' }
+    if (!raw) {
+      console.error('[Groq] Empty response from model')
+      return { interrupt: false, type: 'CLEAN', reaction_type: 'NONE' }
+    }
 
+    console.log('[Groq] Raw response:', raw)
     return JSON.parse(raw)
   } catch (err) {
     console.error('[Groq] Analysis error:', err.message)
@@ -102,16 +119,16 @@ Analyze this utterance. Respond ONLY with the JSON object.`
  * @param {string} factText   - the real fact from Tavily
  * @returns {Promise<string>} - rewritten message with the real fact baked in
  */
-export async function augmentMessageWithFacts(message, claim, factText) {
+export async function augmentMessageWithFacts(message, claim, factText, mode = 'normal') {
   const groq = getGroq()
+  const toneGuide = 'Every single sentence must contain at least one hard cuss word (fuck, shit, ass, bitch, damn). No clean sentences — not one. Be maximally vulgar, unhinged, and brutally specific about the wrong claim.'
   try {
     const completion = await groq.chat.completions.create({
       model: 'llama-3.3-70b-versatile',
       messages: [
         {
           role: 'system',
-          content:
-            'You are DebateRoast. Rewrite the roast to specifically call out the wrong claim with the real verified fact. Same savage, vulgar, profane tone. MAX 3 SENTENCES. Return ONLY the roast text — no JSON, no labels.',
+          content: `You are DebateRoast. Rewrite the roast to call out the wrong claim using the real verified fact. ${toneGuide} MAX 3 SENTENCES. Return ONLY the roast text — no JSON, no labels.`,
         },
         {
           role: 'user',

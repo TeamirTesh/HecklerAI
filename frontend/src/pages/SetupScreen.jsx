@@ -119,7 +119,7 @@ export default function SetupScreen() {
             className="w-full bg-red-600 hover:bg-red-500 disabled:bg-red-900 disabled:cursor-not-allowed text-white font-black text-xl py-4 rounded-xl transition-colors shadow-lg shadow-red-900/40 tracking-wide"
             style={{ fontFamily: 'Impact, Arial Black, sans-serif' }}
           >
-            {loading ? 'CREATING ROOM...' : '🔥 START DEBATE 🔥'}
+            {loading ? 'CREATING ROOM...' : 'START DEBATE'}
           </motion.button>
 
           <p className="text-center text-gray-500 text-xs">

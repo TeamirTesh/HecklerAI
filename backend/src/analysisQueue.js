@@ -10,6 +10,10 @@ import { analyzeUtterance, augmentMessageWithFacts } from './groq.js'
 import { factCheck } from './tavily.js'
 import { buildRoastAudio, generateSpeech } from './cartesia.js'
 
+const GRACE_PERIOD_MS = 5_000   // silence during opening announcement
+const COOLDOWN_MS     = 4_000   // minimum gap between interrupts
+const MIN_WORDS       = 8       // ignore very short fragments only
+
 /**
  * Process a finalized utterance through the full analysis pipeline.
  *
@@ -23,6 +27,15 @@ export async function processUtterance({ roomId, speaker, utterance, onRoast }) 
   const room = await getRoom(roomId)
   if (!room || room.status !== 'active') return
 
+  // ── PROBLEM 1: grace period — stay silent during opening announcement ──────
+  if (room.startedAt && Date.now() - room.startedAt < GRACE_PERIOD_MS) return
+
+  // ── PROBLEM 2: cooldown — prevent back-to-back interruptions ──────────────
+  if (room.lastRoastAt && Date.now() - room.lastRoastAt < COOLDOWN_MS) return
+
+  // ── PROBLEM 3: minimum length — ignore fragments and incomplete thoughts ───
+  if (utterance.trim().split(/\s+/).length < MIN_WORDS) return
+
   await pushExchange(roomId, speaker, utterance)
   const exchanges = await getExchanges(roomId)
 
@@ -33,7 +46,11 @@ export async function processUtterance({ roomId, speaker, utterance, onRoast }) 
     exchanges,
     speaker,
     utterance,
+    mode: room.roastLevel || room.mode || 'normal',
   })
+
+  console.log(`[Analysis] mode=${room.roastMode} speaker=${speaker} interrupt=${analysis.interrupt} type=${analysis.type} fallacy=${analysis.fallacy_name}`)
+  console.log(`[Analysis] utterance: "${utterance}"`)
 
   if (!analysis.interrupt) return
 
@@ -54,7 +71,7 @@ export async function processUtterance({ roomId, speaker, utterance, onRoast }) 
     factVerdict = factResult.verdict === 'UNVERIFIABLE' ? null : factResult.verdict
 
     if (factResult.factText) {
-      messageText = await augmentMessageWithFacts(analysis.message, analysis.claim, factResult.factText)
+      messageText = await augmentMessageWithFacts(analysis.message, analysis.claim, factResult.factText, room.roastLevel || room.mode || 'normal')
     }
 
     const messageAudio = await generateSpeech(messageText, { speed: 0 })
@@ -66,6 +83,9 @@ export async function processUtterance({ roomId, speaker, utterance, onRoast }) 
     // FALLACY or GOOD_POINT — both TTS calls run in parallel inside buildRoastAudio
     audioBuffer = await buildRoastAudio(analysis.stop_phrase, messageText)
   }
+
+  // Update cooldown timestamp on the room object
+  room.lastRoastAt = Date.now()
 
   const scores = await incrementScore(roomId, speaker)
 
